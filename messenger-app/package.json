@@ -1,10 +1,13 @@
 {
-  "name": "messenger-app",
+  "name": "zomo-chat",
   "version": "1.0.0",
-  "description": "Premium real-time messenger with local server",
+  "description": "Premium real-time messenger",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
+  },
+  "engines": {
+    "node": "18.x"
   },
   "dependencies": {
     "express": "^4.18.2",
