@@ -943,3 +943,20 @@ body {
   .profile-content { flex-direction: column; align-items: center; }
   .emoji-grid { grid-template-columns: repeat(5, 1fr); }
 }
+/* ==================== АДАПТИВ ДЛЯ ТЕЛЕФОНОВ (ПОРТРЕТНЫЙ РЕЖИМ) ==================== */
+@media (max-width: 480px) and (orientation: portrait) {
+  .main-container { flex-direction: column; }
+  .sidebar-menu { width: 100%; padding: 12px; }
+  .menu-items { flex-direction: row; overflow-x: auto; }
+  .menu-item { padding: 10px 12px; font-size: 0.9rem; }
+  .menu-item span:not(.menu-icon) { display: none; }
+  .menu-icon { font-size: 1.8rem; }
+  .content-area { height: calc(100vh - 140px); }
+  .chats-container { flex-direction: column; }
+  .chats-sidebar { width: 100%; max-height: 35vh; }
+  .chat-area { padding: 12px; }
+  .shop-items-grid { grid-template-columns: repeat(2, 1fr); }
+  .profile-content { flex-direction: column; }
+  .avatar-canvas-container { width: 180px; height: 180px; margin: 0 auto; }
+  .games-grid { grid-template-columns: 1fr; }
+}
