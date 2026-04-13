@@ -25,12 +25,27 @@ const friendIdInput = document.getElementById('friend-id-input');
 const streakDisplay = document.getElementById('streak-display');
 const streakCount = document.getElementById('streak-count');
 
+const mobileChatsList = document.getElementById('mobile-chats-list');
+const mobileChatView = document.getElementById('mobile-chat-view');
+const mobileBackBtn = document.getElementById('mobile-back-btn');
+
+const attachImageBtn = document.getElementById('attach-image-btn');
+const voiceRecordBtn = document.getElementById('voice-record-btn');
+const stickerBtn = document.getElementById('sticker-btn');
+const imageInput = document.getElementById('image-input');
+const stickerModal = document.getElementById('sticker-modal');
+const stickerGrid = document.getElementById('sticker-grid');
+const closeStickerModal = document.getElementById('close-sticker-modal');
+
 const profileNickname = document.getElementById('profile-nickname');
 const profileId = document.getElementById('profile-id');
 const profileCoins = document.getElementById('profile-coins');
 const avatarBase = document.getElementById('avatar-base');
 const accessoriesLayer = document.getElementById('accessories-layer');
 const equippedList = document.getElementById('equipped-list');
+const uploadAvatarBtn = document.getElementById('upload-avatar-btn');
+const avatarPhotoInput = document.getElementById('avatar-photo-input');
+const removeAccessoryBtn = document.getElementById('remove-accessory-btn');
 
 const shopCoinsAmount = document.getElementById('shop-coins-amount');
 const shopItemsGrid = document.getElementById('shop-items-grid');
@@ -41,7 +56,6 @@ const createDuelBtn = document.getElementById('create-duel-btn');
 const duelFriendSelect = document.getElementById('duel-friend-select');
 const duelGameSelect = document.getElementById('duel-game-select');
 const duelBet = document.getElementById('duel-bet');
-const duelsList = document.getElementById('duels-list');
 
 const dailyBonusBtn = document.getElementById('daily-bonus-btn');
 const dailyBonusStatus = document.getElementById('daily-bonus-status');
@@ -51,15 +65,9 @@ const enableNotificationsBtn = document.getElementById('enable-notifications-btn
 const wheelModal = document.getElementById('wheel-modal');
 const guessModal = document.getElementById('guess-modal');
 const quizModal = document.getElementById('quiz-modal');
-const duelModal = document.getElementById('duel-modal');
-const rpsBotModal = document.getElementById('rps-bot-modal');
-
 const closeWheelModal = document.getElementById('close-wheel-modal');
 const closeGuessModal = document.getElementById('close-guess-modal');
 const closeQuizModal = document.getElementById('close-quiz-modal');
-const closeDuelModal = document.getElementById('close-duel-modal');
-const closeRpsBotModal = document.getElementById('close-rps-bot-modal');
-
 const spinWheelBtn = document.getElementById('spin-wheel-btn');
 const wheelCanvas = document.getElementById('wheel-canvas');
 const wheelResult = document.getElementById('wheel-result');
@@ -68,8 +76,6 @@ const guessNumberBtn = document.getElementById('guess-number-btn');
 const clickerBtn = document.getElementById('clicker-btn');
 const clickerCount = document.getElementById('clicker-count');
 const quizBtn = document.getElementById('quiz-btn');
-const rpsBotBtn = document.getElementById('rps-bot-btn');
-const coinBotBtn = document.getElementById('coin-bot-btn');
 
 // ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
 let currentUser = null;
@@ -82,7 +88,8 @@ let shopAccessories = [];
 let secretNumber = 0;
 let guessAttempts = 0;
 let currentQuiz = [];
-let quizAnswers = [];
+let mediaRecorder = null;
+let audioChunks = [];
 
 const emojiList = ['😊','😎','🥰','😇','🤓','🧐','🤩','😏','😈','👻','🐶','🐱','🦊','🐼','🐸','🐧','🦁','🐮','🐷','🐨','🌟','⭐','🌙','☀️','🌈','🔥','💧','❄️','⚡','💎'];
 
@@ -153,6 +160,26 @@ function setupEventListeners() {
   friendIdInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') addFriend(); });
   messageForm.addEventListener('submit', sendMessage);
   
+  mobileBackBtn.addEventListener('click', () => {
+    mobileChatView.classList.remove('active');
+    mobileChatsList.style.display = 'block';
+  });
+  
+  attachImageBtn.addEventListener('click', () => imageInput.click());
+  imageInput.addEventListener('change', uploadImage);
+  
+  voiceRecordBtn.addEventListener('click', toggleVoiceRecord);
+  
+  stickerBtn.addEventListener('click', async () => {
+    await loadStickers();
+    stickerModal.style.display = 'flex';
+  });
+  closeStickerModal.addEventListener('click', () => stickerModal.style.display = 'none');
+  
+  uploadAvatarBtn.addEventListener('click', () => avatarPhotoInput.click());
+  avatarPhotoInput.addEventListener('change', uploadAvatar);
+  removeAccessoryBtn.addEventListener('click', removeAllAccessories);
+  
   document.querySelectorAll('.category-btn').forEach(btn => btn.addEventListener('click', () => {
     document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -171,13 +198,7 @@ function setupEventListeners() {
   quizBtn.addEventListener('click', startQuiz);
   closeQuizModal.addEventListener('click', () => quizModal.style.display = 'none');
   
-  rpsBotBtn.addEventListener('click', () => rpsBotModal.style.display = 'flex');
-  closeRpsBotModal.addEventListener('click', () => rpsBotModal.style.display = 'none');
-  document.querySelectorAll('.rps-btn').forEach(btn => btn.addEventListener('click', playRPSBot));
-  
-  coinBotBtn.addEventListener('click', playCoinBot);
   createDuelBtn.addEventListener('click', createDuel);
-  closeDuelModal.addEventListener('click', () => duelModal.style.display = 'none');
   
   dailyBonusBtn.addEventListener('click', claimDailyBonus);
   saveEmojiBtn.addEventListener('click', saveAvatarEmoji);
@@ -229,13 +250,18 @@ async function handleLogin(e) {
 function updateUserDisplay() {
   menuNickname.textContent = currentUser.nickname;
   menuCoins.textContent = `🪙 ${currentUser.coins || 0}`;
-  menuAvatar.textContent = currentUser.avatar_emoji || '😊';
+  if (currentUser.avatar_photo) {
+    menuAvatar.style.backgroundImage = `url(${currentUser.avatar_photo})`;
+    menuAvatar.textContent = '';
+  } else {
+    menuAvatar.style.backgroundImage = '';
+    menuAvatar.textContent = currentUser.avatar_emoji || '😊';
+  }
 }
 
 function logout() {
   if (socket) socket.disconnect();
-  currentUser = null;
-  selectedFriend = null;
+  currentUser = null; selectedFriend = null;
   authContainer.style.display = 'block';
   mainContainer.style.display = 'none';
   loginForm.reset(); registerForm.reset();
@@ -252,12 +278,17 @@ function initSocket() {
     }
   });
   socket.on('new-message', (message) => {
-    if (selectedFriend && (message.senderId === selectedFriend.id || message.receiverId === selectedFriend.id)) appendMessage(message);
+    if (selectedFriend && (message.senderId === selectedFriend.id || message.receiverId === selectedFriend.id)) {
+      appendMessage(message);
+    }
     loadFriends();
     refreshUserData();
   });
-  socket.on('duel-invite', ({ duelId }) => loadActiveDuels());
-  socket.on('duel-move', ({ duelId, move }) => handleDuelMove(duelId, move));
+  socket.on('push-notification', (data) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(data.title, { body: data.body, icon: data.icon });
+    }
+  });
 }
 
 async function refreshUserData() {
@@ -265,6 +296,7 @@ async function refreshUserData() {
   const res = await fetch(`/api/user/${currentUser.userId}`);
   const data = await res.json();
   currentUser.coins = data.coins;
+  currentUser.avatar_photo = data.avatar_photo;
   updateUserDisplay();
 }
 
@@ -279,7 +311,7 @@ function renderFriendsList() {
   if (friends.length === 0) { friendsListEl.innerHTML = '<p class="empty-text">Друзей пока нет</p>'; return; }
   friendsListEl.innerHTML = friends.map(f => `
     <div class="friend-item ${selectedFriend?.id === f.id ? 'active' : ''}" data-id="${f.id}">
-      <div class="friend-avatar">${f.avatar_emoji || '😊'}</div>
+      <div class="friend-avatar" style="${f.avatar_photo ? `background-image: url(${f.avatar_photo})` : ''}">${f.avatar_photo ? '' : (f.avatar_emoji || '😊')}</div>
       <div class="friend-info"><div class="friend-name">${f.nickname}</div><div class="friend-last-message">${f.lastmessage || 'Начните общение'}</div></div>
     </div>
   `).join('');
@@ -291,11 +323,12 @@ async function selectFriend(friendId) {
   if (!selectedFriend) return;
   chatWithNameEl.textContent = selectedFriend.nickname;
   messageInput.disabled = false; sendBtn.disabled = false;
-  const streakRes = await fetch(`/api/streak/${currentUser.userId}/${friendId}`);
-  const streakData = await streakRes.json();
-  currentStreak = streakData.streak || 0;
-  streakDisplay.style.display = currentStreak > 0 ? 'flex' : 'none';
-  streakCount.textContent = currentStreak;
+  
+  if (window.innerWidth <= 768) {
+    mobileChatView.classList.add('active');
+    mobileChatsList.style.display = 'none';
+  }
+  
   const msgRes = await fetch(`/api/messages/${currentUser.userId}/${friendId}`);
   renderMessages(await msgRes.json());
   renderFriendsList();
@@ -309,7 +342,14 @@ function renderMessages(messages) {
   messagesContainer.innerHTML = messages.map(m => {
     const isSent = m.senderId === currentUser.userId;
     const time = new Date(m.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    return `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-content">${escapeHtml(m.content)}</div><div class="message-time">${time}</div></div>`;
+    
+    if (m.type === 'image') {
+      return `<div class="message ${isSent ? 'sent' : 'received'}"><img src="${m.file_url}" class="message-image" onclick="window.open('${m.file_url}')"><div class="message-time">${time}</div></div>`;
+    } else if (m.type === 'voice') {
+      return `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-voice"><button onclick="playAudio('${m.file_url}')">▶️</button><span>${m.content}</span></div><div class="message-time">${time}</div></div>`;
+    } else {
+      return `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-content">${escapeHtml(m.content)}</div><div class="message-time">${time}</div></div>`;
+    }
   }).join('');
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
@@ -319,7 +359,16 @@ function appendMessage(msg) {
   if (empty) empty.remove();
   const isSent = msg.senderId === currentUser.userId;
   const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  messagesContainer.insertAdjacentHTML('beforeend', `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-content">${escapeHtml(msg.content)}</div><div class="message-time">${time}</div></div>`);
+  
+  let html = '';
+  if (msg.type === 'image') {
+    html = `<div class="message ${isSent ? 'sent' : 'received'}"><img src="${msg.file_url}" class="message-image" onclick="window.open('${msg.file_url}')"><div class="message-time">${time}</div></div>`;
+  } else if (msg.type === 'voice') {
+    html = `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-voice"><button onclick="playAudio('${msg.file_url}')">▶️</button><span>${msg.content}</span></div><div class="message-time">${time}</div></div>`;
+  } else {
+    html = `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-content">${escapeHtml(msg.content)}</div><div class="message-time">${time}</div></div>`;
+  }
+  messagesContainer.insertAdjacentHTML('beforeend', html);
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
@@ -327,8 +376,68 @@ function sendMessage(e) {
   e.preventDefault();
   const content = messageInput.value.trim();
   if (!content || !selectedFriend) return;
-  socket.emit('send-message', { senderId: currentUser.userId, receiverId: selectedFriend.id, content });
+  socket.emit('send-message', { senderId: currentUser.userId, receiverId: selectedFriend.id, content, type: 'text' });
   messageInput.value = '';
+}
+
+async function uploadImage() {
+  const file = imageInput.files[0];
+  if (!file || !selectedFriend) return;
+  const formData = new FormData();
+  formData.append('image', file);
+  formData.append('senderId', currentUser.userId);
+  formData.append('receiverId', selectedFriend.id);
+  
+  const res = await fetch('/api/upload-chat-image', { method: 'POST', body: formData });
+  const data = await res.json();
+  if (data.success) {
+    socket.emit('send-message', { senderId: currentUser.userId, receiverId: selectedFriend.id, content: '📷 Изображение', type: 'image', fileUrl: data.fileUrl });
+  }
+  imageInput.value = '';
+}
+
+async function toggleVoiceRecord() {
+  if (!mediaRecorder) {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'voice.webm');
+      formData.append('senderId', currentUser.userId);
+      formData.append('receiverId', selectedFriend.id);
+      formData.append('duration', Math.round(audioChunks.length * 0.1));
+      
+      const res = await fetch('/api/upload-voice', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        socket.emit('send-message', { senderId: currentUser.userId, receiverId: selectedFriend.id, content: `🎤 Голосовое`, type: 'voice', fileUrl: data.fileUrl });
+      }
+    };
+    mediaRecorder.start();
+    voiceRecordBtn.textContent = '⏹️';
+  } else {
+    mediaRecorder.stop();
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    mediaRecorder = null;
+    voiceRecordBtn.textContent = '🎤';
+  }
+}
+
+function playAudio(url) {
+  new Audio(url).play();
+}
+
+async function loadStickers() {
+  const res = await fetch('/api/stickers');
+  const stickers = await res.json();
+  stickerGrid.innerHTML = stickers.map(s => `<div class="sticker-item" data-url="${s.url}">🖼️</div>`).join('');
+  document.querySelectorAll('.sticker-item').forEach(el => el.addEventListener('click', () => {
+    socket.emit('send-message', { senderId: currentUser.userId, receiverId: selectedFriend.id, content: '😊 Стикер', type: 'image', fileUrl: el.dataset.url });
+    stickerModal.style.display = 'none';
+  }));
 }
 
 async function addFriend() {
@@ -350,7 +459,13 @@ async function loadProfile() {
   profileNickname.textContent = currentUser.nickname;
   profileId.textContent = currentUser.userId;
   profileCoins.textContent = currentUser.coins;
-  avatarBase.textContent = currentUser.avatar_emoji;
+  if (currentUser.avatar_photo) {
+    avatarBase.style.backgroundImage = `url(${currentUser.avatar_photo})`;
+    avatarBase.textContent = '';
+  } else {
+    avatarBase.style.backgroundImage = '';
+    avatarBase.textContent = currentUser.avatar_emoji || '😊';
+  }
   const res = await fetch(`/api/accessories/${currentUser.userId}`);
   equippedAccessories = await res.json();
   renderAccessories();
@@ -371,6 +486,7 @@ function renderAccessories() {
     el.style.top = (acc.y || 80) + 'px';
     el.style.transform = `translate(-50%, -50%) scale(${el.dataset.scale})`;
     makeDraggable(el);
+    addScaleControls(el);
     accessoriesLayer.appendChild(el);
     equippedList.innerHTML += `<span class="equipped-badge">${accData.icon} ${accData.name}</span>`;
   });
@@ -416,6 +532,62 @@ function makeDraggable(el) {
   el.addEventListener('touchstart', e => { e.preventDefault(); const t = e.touches[0]; startDrag(t.clientX, t.clientY); });
   document.addEventListener('touchmove', e => { if (!isDragging) return; const t = e.touches[0]; onDrag(t.clientX, t.clientY); });
   document.addEventListener('touchend', endDrag);
+}
+
+function addScaleControls(el) {
+  const controls = document.createElement('div');
+  controls.className = 'accessory-controls';
+  controls.innerHTML = `<button class="accessory-scale-btn" data-action="minus">−</button><span class="accessory-scale-value">${el.dataset.scale || 1.0}x</span><button class="accessory-scale-btn" data-action="plus">+</button>`;
+  el.appendChild(controls);
+  controls.style.display = 'none';
+  
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.accessory-controls').forEach(c => c.style.display = 'none');
+    controls.style.display = 'flex';
+  });
+  
+  controls.querySelector('[data-action="minus"]').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    let scale = parseFloat(el.dataset.scale) || 1.0;
+    scale = Math.max(0.5, scale - 0.1);
+    el.dataset.scale = scale;
+    el.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    controls.querySelector('.accessory-scale-value').textContent = scale.toFixed(1) + 'x';
+    await fetch('/api/accessory-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, accessory_id: el.dataset.id, x: parseInt(el.style.left), y: parseInt(el.style.top), scale }) });
+  });
+  
+  controls.querySelector('[data-action="plus"]').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    let scale = parseFloat(el.dataset.scale) || 1.0;
+    scale = Math.min(2.0, scale + 0.1);
+    el.dataset.scale = scale;
+    el.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    controls.querySelector('.accessory-scale-value').textContent = scale.toFixed(1) + 'x';
+    await fetch('/api/accessory-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, accessory_id: el.dataset.id, x: parseInt(el.style.left), y: parseInt(el.style.top), scale }) });
+  });
+}
+
+async function uploadAvatar() {
+  const file = avatarPhotoInput.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('avatar', file);
+  formData.append('userId', currentUser.userId);
+  const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData });
+  const data = await res.json();
+  if (data.success) {
+    currentUser.avatar_photo = data.avatar_photo;
+    updateUserDisplay();
+    loadProfile();
+  }
+}
+
+async function removeAllAccessories() {
+  for (const acc of equippedAccessories) {
+    await fetch('/api/accessory-toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, accessory_id: acc.accessory_id, equipped: 0 }) });
+  }
+  equippedAccessories = [];
+  renderAccessories();
 }
 
 // ==================== МАГАЗИН ====================
@@ -534,7 +706,6 @@ async function doClicker() {
 async function startQuiz() {
   const res = await fetch('/api/quiz');
   currentQuiz = await res.json();
-  quizAnswers = [];
   renderQuizQuestion(0);
   quizModal.style.display = 'flex';
 }
@@ -563,35 +734,6 @@ async function finishQuiz() {
   setTimeout(() => quizModal.style.display = 'none', 2000);
 }
 
-function playRPSBot(e) {
-  const playerMove = e.target.dataset.move;
-  const moves = ['rock', 'scissors', 'paper'];
-  const botMove = moves[Math.floor(Math.random() * 3)];
-  const result = document.getElementById('rps-bot-result');
-  let win = false;
-  if (playerMove === botMove) result.textContent = `Ничья! Бот выбрал ${botMove}`;
-  else if ((playerMove === 'rock' && botMove === 'scissors') || (playerMove === 'scissors' && botMove === 'paper') || (playerMove === 'paper' && botMove === 'rock')) {
-    result.textContent = `🎉 Победа! Бот выбрал ${botMove}`; win = true;
-  } else result.textContent = `😢 Поражение. Бот выбрал ${botMove}`;
-  if (win) {
-    const bet = parseInt(document.getElementById('rps-bot-bet').value) || 20;
-    fetch('/api/clicker', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, bet }) })
-      .then(r => r.json()).then(d => { currentUser.coins = d.coins; updateUserDisplay(); });
-  }
-  setTimeout(() => rpsBotModal.style.display = 'none', 2000);
-}
-
-function playCoinBot() {
-  const bet = parseInt(document.getElementById('coin-bot-bet').value) || 20;
-  const playerChoice = confirm('Орёл (OK) или Решка (Отмена)?') ? 'heads' : 'tails';
-  const result = Math.random() > 0.5 ? 'heads' : 'tails';
-  if (playerChoice === result) {
-    alert(`🎉 Выиграли! +${bet} 🪙`);
-    fetch('/api/clicker', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, bet }) })
-      .then(r => r.json()).then(d => { currentUser.coins = d.coins; updateUserDisplay(); });
-  } else alert(`😢 Проиграли. Выпало: ${result === 'heads' ? 'Орёл' : 'Решка'}`);
-}
-
 async function loadGamesData() {
   duelFriendSelect.innerHTML = '<option value="">Выберите друга</option>' + friends.map(f => `<option value="${f.id}">${f.nickname}</option>`).join('');
 }
@@ -607,9 +749,6 @@ async function createDuel() {
   alert('Вызов отправлен!');
 }
 
-async function loadActiveDuels() { duelsList.innerHTML = '<p class="empty-text">Нет активных дуэлей</p>'; }
-function handleDuelMove(duelId, move) { console.log('Duel move:', duelId, move); }
-
 // ==================== НАСТРОЙКИ ====================
 async function claimDailyBonus() {
   const res = await fetch('/api/daily-bonus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId }) });
@@ -623,7 +762,9 @@ async function saveAvatarEmoji() {
   if (!selected) return;
   await fetch('/api/avatar-emoji', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, avatar_emoji: selected.dataset.emoji }) });
   currentUser.avatar_emoji = selected.dataset.emoji;
-  menuAvatar.textContent = selected.dataset.emoji;
+  currentUser.avatar_photo = null;
+  updateUserDisplay();
+  avatarBase.style.backgroundImage = '';
   avatarBase.textContent = selected.dataset.emoji;
 }
 
@@ -643,27 +784,16 @@ function checkDailyBonusOnLogin() {
 async function enableNotifications() {
   if ('Notification' in window) {
     const perm = await Notification.requestPermission();
-    document.getElementById('notifications-status').textContent = perm === 'granted' ? '✅ Уведомления включены' : '❌ Отклонено';
-    if (perm === 'granted') navigator.serviceWorker?.register('/sw.js');
+    if (perm === 'granted') {
+      navigator.serviceWorker?.register('/sw.js');
+      alert('✅ Уведомления включены!');
+    }
   }
 }
 
-// ==================== ЗАПУСК ====================
-init();
-// ==================== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ====================
-
-// Обновление монет везде
-function updateAllCoinsDisplays() {
-  menuCoins.textContent = `🪙 ${currentUser.coins || 0}`;
-  if (profileCoins) profileCoins.textContent = currentUser.coins || 0;
-  if (shopCoinsAmount) shopCoinsAmount.textContent = currentUser.coins || 0;
-}
-
-// Таймеры для игр
+// ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 setInterval(() => {
   if (!currentUser) return;
-  
-  // Таймер колеса
   const today = new Date().toISOString().split('T')[0];
   const lastWheel = localStorage.getItem(`wheel_${currentUser.userId}`);
   if (lastWheel !== today && wheelTimer) {
@@ -677,245 +807,24 @@ setInterval(() => {
   }
 }, 60000);
 
-// Уведомления
-function showNotification(title, body) {
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, { body, icon: '/favicon.ico' });
-  }
-}
-
-// Обработка дуэлей (продолжение)
-async function acceptDuel(duelId) {
-  try {
-    const res = await fetch('/api/duel/accept', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ duelId, userId: currentUser.userId })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    
-    duelModal.style.display = 'flex';
-    startDuelGame(duelId, data.game_type, data.bet);
-  } catch (err) {
-    alert('❌ ' + err.message);
-  }
-}
-
-function startDuelGame(duelId, gameType, bet) {
-  const area = document.getElementById('duel-game-area');
-  
-  if (gameType === 'rps') {
-    area.innerHTML = `
-      <h3>КНБ (ставка ${bet} 🪙)</h3>
-      <div class="rps-buttons">
-        <button class="rps-btn" data-move="rock">🪨</button>
-        <button class="rps-btn" data-move="scissors">✂️</button>
-        <button class="rps-btn" data-move="paper">📄</button>
-      </div>
-      <p id="duel-status">Выберите ход...</p>
-    `;
-    document.querySelectorAll('.rps-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const move = btn.dataset.move;
-        socket.emit('duel-move', { duelId, opponentId: selectedFriend?.id, move });
-        btn.disabled = true;
-        document.getElementById('duel-status').textContent = 'Ожидание соперника...';
-      });
-    });
-  } else if (gameType === 'coin') {
-    area.innerHTML = `
-      <h3>Монетка (ставка ${bet} 🪙)</h3>
-      <div class="coin-buttons">
-        <button class="coin-btn" data-move="heads">🪙 Орёл</button>
-        <button class="coin-btn" data-move="tails">💰 Решка</button>
-      </div>
-      <p id="duel-status">Выберите сторону...</p>
-    `;
-    document.querySelectorAll('.coin-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const move = btn.dataset.move;
-        socket.emit('duel-move', { duelId, opponentId: selectedFriend?.id, move });
-        document.querySelectorAll('.coin-btn').forEach(b => b.disabled = true);
-        document.getElementById('duel-status').textContent = 'Ожидание результата...';
-        
-        setTimeout(() => {
-          const result = Math.random() > 0.5 ? 'heads' : 'tails';
-          const won = move === result;
-          completeDuel(duelId, won);
-        }, 2000);
-      });
-    });
-  } else if (gameType === 'reaction') {
-    area.innerHTML = `
-      <h3>Реакция (ставка ${bet} 🪙)</h3>
-      <p>Нажмите на кнопку, как только она станет зелёной!</p>
-      <button id="reaction-btn" class="btn-primary" style="background: red; width: 100%; padding: 40px;">Ждите...</button>
-      <p id="duel-status"></p>
-    `;
-    
-    const btn = document.getElementById('reaction-btn');
-    let canClick = false;
-    let startTime;
-    
-    setTimeout(() => {
-      btn.style.background = '#00d68f';
-      btn.textContent = 'ЖМИ!';
-      canClick = true;
-      startTime = Date.now();
-      
-      setTimeout(() => {
-        if (canClick) {
-          canClick = false;
-          completeDuel(duelId, false);
-        }
-      }, 5000);
-    }, 2000 + Math.random() * 3000);
-    
-    btn.addEventListener('click', () => {
-      if (!canClick) {
-        if (btn.textContent === 'Ждите...') {
-          document.getElementById('duel-status').textContent = 'Рано! Вы проиграли.';
-          completeDuel(duelId, false);
-        }
-        return;
-      }
-      const reactionTime = Date.now() - startTime;
-      document.getElementById('duel-status').textContent = `Ваше время: ${reactionTime}мс`;
-      socket.emit('duel-move', { duelId, opponentId: selectedFriend?.id, move: reactionTime });
-      btn.disabled = true;
-    });
-  }
-}
-
-async function completeDuel(duelId, won) {
-  const status = document.getElementById('duel-status');
-  if (status) {
-    status.textContent = won ? '🎉 Вы выиграли!' : '😢 Вы проиграли...';
-  }
-  
-  if (won) {
-    try {
-      const res = await fetch('/api/duel/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ duelId, winnerId: currentUser.userId })
-      });
-      const data = await res.json();
-      currentUser.coins += data.prize;
-      updateUserDisplay();
-    } catch (err) {
-      console.error('Failed to complete duel:', err);
-    }
-  }
-  
-  setTimeout(() => {
-    duelModal.style.display = 'none';
-  }, 3000);
-}
-
-// Управление размером аксессуара (добавить в профиль)
-function addScaleControls(el) {
-  const controls = document.createElement('div');
-  controls.className = 'accessory-controls';
-  controls.innerHTML = `
-    <button class="accessory-scale-btn" data-action="minus">−</button>
-    <span class="accessory-scale-value">${el.dataset.scale || 1.0}x</span>
-    <button class="accessory-scale-btn" data-action="plus">+</button>
-  `;
-  
-  el.appendChild(controls);
-  controls.style.display = 'none';
-  
-  el.addEventListener('click', () => {
-    document.querySelectorAll('.accessory-controls').forEach(c => c.style.display = 'none');
-    controls.style.display = 'flex';
-  });
-  
-  controls.querySelector('[data-action="minus"]').addEventListener('click', async (e) => {
-    e.stopPropagation();
-    let scale = parseFloat(el.dataset.scale) || 1.0;
-    scale = Math.max(0.5, scale - 0.1);
-    el.dataset.scale = scale;
-    el.style.transform = `translate(-50%, -50%) scale(${scale})`;
-    controls.querySelector('.accessory-scale-value').textContent = scale.toFixed(1) + 'x';
-    
-    await fetch('/api/accessory-update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: currentUser.userId, accessory_id: el.dataset.id, x: parseInt(el.style.left), y: parseInt(el.style.top), scale })
-    });
-  });
-  
-  controls.querySelector('[data-action="plus"]').addEventListener('click', async (e) => {
-    e.stopPropagation();
-    let scale = parseFloat(el.dataset.scale) || 1.0;
-    scale = Math.min(2.0, scale + 0.1);
-    el.dataset.scale = scale;
-    el.style.transform = `translate(-50%, -50%) scale(${scale})`;
-    controls.querySelector('.accessory-scale-value').textContent = scale.toFixed(1) + 'x';
-    
-    await fetch('/api/accessory-update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: currentUser.userId, accessory_id: el.dataset.id, x: parseInt(el.style.left), y: parseInt(el.style.top), scale })
-    });
-  });
-}
-
-// Переопределяем renderAccessories с контролами размера
-const originalRenderAccessories = renderAccessories;
-renderAccessories = function() {
-  accessoriesLayer.innerHTML = '';
-  equippedList.innerHTML = '';
-  equippedAccessories.forEach(acc => {
-    const accData = shopAccessories.find(a => a.id === acc.accessory_id);
-    if (!accData) return;
-    const el = document.createElement('div');
-    el.className = 'accessory-item';
-    el.textContent = accData.icon;
-    el.dataset.id = acc.accessory_id;
-    el.dataset.scale = acc.scale || 1.0;
-    el.style.left = (acc.x || 80) + 'px';
-    el.style.top = (acc.y || 80) + 'px';
-    el.style.transform = `translate(-50%, -50%) scale(${el.dataset.scale})`;
-    makeDraggable(el);
-    addScaleControls(el);
-    accessoriesLayer.appendChild(el);
-    equippedList.innerHTML += `<span class="equipped-badge">${accData.icon} ${accData.name}</span>`;
-  });
-};
-
-// Стили для кнопок размера (добавляем динамически)
-const scaleStyles = document.createElement('style');
-scaleStyles.textContent = `
-  .accessory-item { position: absolute; cursor: grab; user-select: none; text-shadow: 0 2px 10px rgba(0,0,0,0.5); transform: translate(-50%, -50%); }
-  .accessory-controls { position: absolute; bottom: -35px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; background: var(--glass-bg); padding: 4px 8px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border); z-index: 100; }
-  .accessory-scale-btn { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-primary); border: none; color: white; font-weight: bold; cursor: pointer; font-size: 16px; }
-  .accessory-scale-value { color: var(--text-primary); font-size: 12px; font-weight: 600; min-width: 35px; text-align: center; }
-  .quiz-option { display: block; width: 100%; padding: 12px; margin: 8px 0; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text-primary); cursor: pointer; }
-  .quiz-option:hover { background: var(--accent-primary); }
-  .coin-buttons { display: flex; gap: 12px; justify-content: center; margin: 20px 0; }
-  .coin-btn { padding: 16px 24px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 16px; color: var(--text-primary); font-size: 1.1rem; cursor: pointer; }
-  .duel-create { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 20px 0; }
-  #clicker-count { font-weight: 700; margin-top: 8px; }
-  .game-card .bet-input { margin: 12px 0; }
-  .game-card .bet-input input { width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text-primary); }
-`;
-document.head.appendChild(scaleStyles);
-
-// Скрываем контролы при клике вне
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.accessory-item')) {
     document.querySelectorAll('.accessory-controls').forEach(c => c.style.display = 'none');
   }
 });
 
-// Экспорт для глобального доступа
-window.acceptDuel = acceptDuel;
-window.declineDuel = async (duelId) => {
-  await fetch('/api/duel/decline', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ duelId }) });
-  loadActiveDuels();
-};
+const style = document.createElement('style');
+style.textContent = `
+  .accessory-controls { position: absolute; bottom: -35px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; background: var(--glass-bg); padding: 4px 8px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border); z-index: 100; }
+  .accessory-scale-btn { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-primary); border: none; color: white; font-weight: bold; cursor: pointer; font-size: 16px; }
+  .accessory-scale-value { color: var(--text-primary); font-size: 12px; font-weight: 600; min-width: 35px; text-align: center; }
+  .quiz-option { display: block; width: 100%; padding: 12px; margin: 8px 0; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text-primary); cursor: pointer; }
+  .quiz-option:hover { background: var(--accent-primary); }
+`;
+document.head.appendChild(style);
 
-console.log('✅ ZOMO CHAT v2.0 загружен!');
+window.playAudio = function(url) { new Audio(url).play(); };
+
+// ==================== ЗАПУСК ====================
+init();
+console.log('✅ ZOMO CHAT v2.5 загружен!');
