@@ -960,3 +960,119 @@ body {
   .avatar-canvas-container { width: 180px; height: 180px; margin: 0 auto; }
   .games-grid { grid-template-columns: 1fr; }
 }
+/* ==================== АДАПТИВ ДЛЯ ПЛАНШЕТОВ ==================== */
+@media (max-width: 768px) {
+  body { padding: 8px; }
+  .app { height: 100vh; }
+  .auth-container { padding: 32px 24px; max-width: 100%; }
+  .main-container { flex-direction: column; gap: 10px; }
+  .sidebar-menu { 
+    width: 100%; 
+    flex-direction: row; 
+    padding: 12px; 
+    order: 2;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    border-radius: 20px 20px 0 0;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+  }
+  .menu-header { display: none; }
+  .menu-items { 
+    display: flex; 
+    flex-direction: row;
+    justify-content: space-around;
+    width: 100%;
+  }
+  .menu-item { 
+    flex-direction: column;
+    padding: 8px;
+    gap: 4px;
+    font-size: 0.7rem;
+    text-align: center;
+  }
+  .menu-item span:not(.menu-icon) { font-size: 0.65rem; }
+  .menu-icon { font-size: 1.5rem; }
+  .menu-footer { display: none; }
+  
+  .content-area { 
+    margin-bottom: 80px;
+    height: calc(100vh - 80px);
+    overflow-y: auto;
+  }
+  
+  .chats-container { flex-direction: column; gap: 10px; }
+  .chats-sidebar { width: 100%; max-height: 35vh; padding: 16px; }
+  .chat-area { padding: 16px; }
+  
+  .profile-content { flex-direction: column; align-items: center; }
+  .avatar-editor { margin-bottom: 20px; }
+  
+  .shop-items-grid { grid-template-columns: repeat(2, 1fr); }
+  .games-grid { grid-template-columns: 1fr; }
+  
+  .emoji-grid { grid-template-columns: repeat(5, 1fr); }
+  
+  .modal-content { width: 95%; padding: 20px; }
+}
+
+/* ==================== АДАПТИВ ДЛЯ МАЛЕНЬКИХ ТЕЛЕФОНОВ ==================== */
+@media (max-width: 480px) and (orientation: portrait) {
+  body { padding: 0; }
+  .app { height: 100vh; }
+  
+  .logo { font-size: 2rem; }
+  .auth-container { padding: 24px 16px; }
+  
+  .sidebar-menu { padding: 8px; }
+  .menu-item { padding: 6px; }
+  .menu-icon { font-size: 1.3rem; }
+  .menu-item span:not(.menu-icon) { font-size: 0.55rem; }
+  
+  .content-area { margin-bottom: 70px; height: calc(100vh - 70px); }
+  
+  .chats-sidebar { max-height: 30vh; padding: 12px; }
+  .chats-header h3 { font-size: 1.2rem; }
+  
+  .friend-item { padding: 10px; }
+  .friend-avatar { width: 36px; height: 36px; font-size: 1.2rem; }
+  .friend-name { font-size: 0.9rem; }
+  .friend-last-message { font-size: 0.7rem; }
+  
+  .chat-header h3 { font-size: 1.1rem; }
+  .message { max-width: 85%; padding: 10px 14px; font-size: 0.9rem; }
+  
+  .message-input-container input { padding: 12px; font-size: 0.9rem; }
+  .send-btn { width: 42px; height: 42px; }
+  
+  .shop-container { padding: 16px; }
+  .shop-container h2 { font-size: 1.5rem; }
+  .shop-coins { font-size: 1.1rem; }
+  .category-btn { padding: 6px 12px; font-size: 0.8rem; }
+  .shop-items-grid { gap: 10px; }
+  .shop-item { padding: 10px; }
+  .shop-item-icon { font-size: 2rem; }
+  .shop-item-name { font-size: 0.8rem; }
+  .shop-item-price { font-size: 0.9rem; }
+  
+  .profile-container { padding: 16px; }
+  .profile-container h2 { font-size: 1.5rem; }
+  .avatar-canvas-container { width: 150px; height: 150px; }
+  .avatar-base { font-size: 4rem; }
+  .profile-info h3 { font-size: 1.4rem; }
+  
+  .games-container { padding: 16px; }
+  .game-card { padding: 16px; }
+  .game-icon { font-size: 2.5rem; }
+  .game-card h3 { font-size: 1.2rem; }
+  
+  .settings-container { padding: 16px; }
+  .theme-selector { flex-wrap: wrap; }
+  .theme-btn { padding: 8px 16px; font-size: 0.9rem; }
+  
+  .wheel-container { width: 250px; height: 250px; }
+  #wheel-canvas { width: 250px; height: 250px; }
+}
