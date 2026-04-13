@@ -1,7 +1,7 @@
 {
   "name": "zomo-chat",
-  "version": "1.0.0",
-  "description": "Premium real-time messenger",
+  "version": "2.0.0",
+  "description": "Premium real-time messenger with games, shop, and accessories",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -12,7 +12,7 @@
   "dependencies": {
     "express": "^4.18.2",
     "socket.io": "^4.6.1",
-    "sqlite3": "^5.1.6",
+    "pg": "^8.11.3",
     "bcrypt": "^5.1.1"
   }
 }
