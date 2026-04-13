@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="/socket.io/socket.io.js"></script>
+  <link rel="manifest" href="/manifest.json">
 </head>
 <body>
   <div id="app" class="app">
@@ -67,26 +68,11 @@
           </div>
         </div>
         <ul class="menu-items">
-          <li class="menu-item active" data-tab="chats">
-            <span class="menu-icon">💬</span>
-            <span>Чаты</span>
-          </li>
-          <li class="menu-item" data-tab="shop">
-            <span class="menu-icon">🛍️</span>
-            <span>Магазин</span>
-          </li>
-          <li class="menu-item" data-tab="profile">
-            <span class="menu-icon">👤</span>
-            <span>Профиль</span>
-          </li>
-          <li class="menu-item" data-tab="games">
-            <span class="menu-icon">🎮</span>
-            <span>Игры</span>
-          </li>
-          <li class="menu-item" data-tab="settings">
-            <span class="menu-icon">⚙️</span>
-            <span>Настройки</span>
-          </li>
+          <li class="menu-item active" data-tab="chats"><span class="menu-icon">💬</span><span>Чаты</span></li>
+          <li class="menu-item" data-tab="shop"><span class="menu-icon">🛍️</span><span>Магазин</span></li>
+          <li class="menu-item" data-tab="profile"><span class="menu-icon">👤</span><span>Профиль</span></li>
+          <li class="menu-item" data-tab="games"><span class="menu-icon">🎮</span><span>Игры</span></li>
+          <li class="menu-item" data-tab="settings"><span class="menu-icon">⚙️</span><span>Настройки</span></li>
         </ul>
         <div class="menu-footer">
           <button id="logout-btn-menu" class="btn-secondary">Выйти</button>
@@ -108,9 +94,7 @@
                   </div>
                 </div>
               </div>
-              <div class="friends-list" id="friends-list">
-                <p class="empty-text">Друзей пока нет</p>
-              </div>
+              <div class="friends-list" id="friends-list"><p class="empty-text">Друзей пока нет</p></div>
             </aside>
             <main class="chat-area glass-panel">
               <div id="chat-header" class="chat-header">
@@ -119,16 +103,11 @@
                   <span id="chat-with-status"></span>
                 </div>
                 <div class="streak-display" id="streak-display" style="display: none;">
-                  <span>🔥</span>
-                  <span id="streak-count">0</span>
+                  <span>🔥</span><span id="streak-count">0</span>
                 </div>
               </div>
               <div id="messages-container" class="messages-container">
-                <div class="empty-chat-message">
-                  <div class="empty-icon">💬</div>
-                  <h4>Нет сообщений</h4>
-                  <p>Начните общение</p>
-                </div>
+                <div class="empty-chat-message"><div class="empty-icon">💬</div><h4>Нет сообщений</h4><p>Начните общение</p></div>
               </div>
               <form id="message-form" class="message-input-container">
                 <input type="text" id="message-input" placeholder="Введите сообщение..." autocomplete="off" disabled>
@@ -165,7 +144,7 @@
                   <div class="avatar-base" id="avatar-base">😊</div>
                   <div class="accessories-layer" id="accessories-layer"></div>
                 </div>
-                <p class="editor-hint">Перетаскивайте аксессуары мышкой</p>
+                <p class="editor-hint">Перетаскивайте аксессуары. Кнопками +/- меняйте размер</p>
               </div>
               <div class="profile-info">
                 <h3 id="profile-nickname">Nickname</h3>
@@ -185,38 +164,22 @@
           <div class="games-container glass-panel">
             <h2>🎮 Мини-игры</h2>
             <div class="games-grid">
-              <!-- Колесо фортуны -->
-              <div class="game-card">
-                <div class="game-icon">🎡</div>
-                <h3>Колесо фортуны</h3>
-                <p>Крутите раз в 24 часа</p>
-                <button class="btn-primary game-btn" id="wheel-spin-btn">🎲 Крутить</button>
-                <p class="wheel-timer" id="wheel-timer"></p>
-              </div>
-              <!-- Дуэли -->
-              <div class="game-card">
-                <div class="game-icon">⚔️</div>
-                <h3>Дуэль</h3>
-                <p>Вызови друга на поединок</p>
-                <select id="duel-friend-select" class="duel-select">
-                  <option value="">Выберите друга</option>
-                </select>
-                <select id="duel-game-select" class="duel-select">
-                  <option value="rps">Камень-Ножницы-Бумага</option>
-                  <option value="coin">Монетка</option>
-                </select>
-                <div class="bet-input">
-                  <input type="number" id="duel-bet" placeholder="Ставка" min="50" max="5000" value="100">
-                  <span>🪙</span>
-                </div>
-                <button class="btn-primary game-btn" id="create-duel-btn">⚔️ Вызвать</button>
-              </div>
+              <div class="game-card"><div class="game-icon">🎡</div><h3>Колесо фортуны</h3><p>Раз в 24 часа</p><button class="btn-primary game-btn" id="wheel-spin-btn">🎲 Крутить</button><p class="wheel-timer" id="wheel-timer"></p></div>
+              <div class="game-card"><div class="game-icon">🔢</div><h3>Угадай число</h3><p>1-100, 3 попытки</p><button class="btn-primary game-btn" id="guess-number-btn">🎯 Играть</button><p id="guess-timer"></p></div>
+              <div class="game-card"><div class="game-icon">🖱️</div><h3>Кликер</h3><p>+1 монета за клик (до 50/день)</p><button class="btn-primary game-btn" id="clicker-btn">👆 Клик</button><p id="clicker-count">0/50</p></div>
+              <div class="game-card"><div class="game-icon">📝</div><h3>Викторина</h3><p>3 вопроса, до 45 монет</p><button class="btn-primary game-btn" id="quiz-btn">❓ Начать</button></div>
+              <div class="game-card"><div class="game-icon">✊</div><h3>КНБ vs Бот</h3><p>Ставка 10-100 🪙</p><div class="bet-input"><input type="number" id="rps-bot-bet" placeholder="Ставка" min="10" max="100" value="20"></div><button class="btn-primary game-btn" id="rps-bot-btn">🤖 Играть</button></div>
+              <div class="game-card"><div class="game-icon">🪙</div><h3>Монетка vs Бот</h3><p>Орёл/Решка, ставка 10-100 🪙</p><div class="bet-input"><input type="number" id="coin-bot-bet" placeholder="Ставка" min="10" max="100" value="20"></div><button class="btn-primary game-btn" id="coin-bot-btn">🪙 Играть</button></div>
             </div>
-            <!-- Активные дуэли -->
-            <div class="active-duels" id="active-duels">
-              <h3>Активные дуэли</h3>
-              <div id="duels-list"></div>
+            
+            <h3 style="margin: 24px 0 16px;">⚔️ Дуэли с друзьями</h3>
+            <div class="duel-create">
+              <select id="duel-friend-select" class="duel-select"><option value="">Выберите друга</option></select>
+              <select id="duel-game-select" class="duel-select"><option value="rps">Камень-Ножницы-Бумага</option><option value="coin">Монетка</option><option value="reaction">Реакция</option></select>
+              <div class="bet-input"><input type="number" id="duel-bet" placeholder="Ставка" min="50" max="5000" value="100"><span>🪙</span></div>
+              <button class="btn-primary" id="create-duel-btn">⚔️ Вызвать на дуэль</button>
             </div>
+            <div class="active-duels"><h3>Активные дуэли</h3><div id="duels-list"></div></div>
           </div>
         </div>
 
@@ -224,51 +187,21 @@
         <div id="tab-settings" class="tab-content">
           <div class="settings-container glass-panel">
             <h2>⚙️ Настройки</h2>
-            <div class="settings-section">
-              <h3>Тема</h3>
-              <div class="theme-selector">
-                <button class="theme-btn" data-theme="dark">🌙 Тёмная</button>
-                <button class="theme-btn" data-theme="light">☀️ Светлая</button>
-                <button class="theme-btn" data-theme="neon">🌈 Неоновая</button>
-              </div>
-            </div>
-            <div class="settings-section">
-              <h3>Смайлик аватара</h3>
-              <div class="emoji-grid settings-emoji-grid" id="settings-emoji-grid"></div>
-              <button class="btn-primary" id="save-emoji-btn">Сохранить</button>
-            </div>
-            <div class="settings-section">
-              <h3>Ежедневный бонус</h3>
-              <button class="btn-primary" id="daily-bonus-btn">🎁 Получить бонус (25 🪙)</button>
-              <p id="daily-bonus-status"></p>
-            </div>
+            <div class="settings-section"><h3>Тема</h3><div class="theme-selector"><button class="theme-btn" data-theme="dark">🌙 Тёмная</button><button class="theme-btn" data-theme="light">☀️ Светлая</button><button class="theme-btn" data-theme="neon">🌈 Неоновая</button></div></div>
+            <div class="settings-section"><h3>Смайлик аватара</h3><div class="emoji-grid settings-emoji-grid" id="settings-emoji-grid"></div><button class="btn-primary" id="save-emoji-btn">Сохранить</button></div>
+            <div class="settings-section"><h3>Ежедневный бонус</h3><button class="btn-primary" id="daily-bonus-btn">🎁 Получить бонус (25 🪙)</button><p id="daily-bonus-status"></p></div>
+            <div class="settings-section"><h3>Уведомления</h3><button class="btn-primary" id="enable-notifications-btn">🔔 Включить уведомления</button><p id="notifications-status"></p></div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Модальное окно дуэли -->
-    <div id="duel-modal" class="modal" style="display: none;">
-      <div class="modal-content glass-panel">
-        <h2>⚔️ Дуэль</h2>
-        <div id="duel-game-area"></div>
-        <button class="btn-secondary" id="close-duel-modal">Закрыть</button>
-      </div>
-    </div>
-
-    <!-- Модальное окно колеса фортуны -->
-    <div id="wheel-modal" class="modal" style="display: none;">
-      <div class="modal-content glass-panel wheel-modal-content">
-        <h2>🎡 Колесо фортуны</h2>
-        <div class="wheel-container">
-          <canvas id="wheel-canvas" width="300" height="300"></canvas>
-          <div class="wheel-pointer">▼</div>
-        </div>
-        <div id="wheel-result"></div>
-        <button class="btn-primary" id="spin-wheel-btn">🎲 Крутить</button>
-        <button class="btn-secondary" id="close-wheel-modal">Закрыть</button>
-      </div>
-    </div>
+    <!-- Модалки -->
+    <div id="wheel-modal" class="modal" style="display: none;"><div class="modal-content glass-panel wheel-modal-content"><h2>🎡 Колесо фортуны</h2><div class="wheel-container"><canvas id="wheel-canvas" width="300" height="300"></canvas><div class="wheel-pointer">▼</div></div><div id="wheel-result"></div><button class="btn-primary" id="spin-wheel-btn">🎲 Крутить</button><button class="btn-secondary" id="close-wheel-modal">Закрыть</button></div></div>
+    <div id="guess-modal" class="modal" style="display: none;"><div class="modal-content glass-panel"><h2>🔢 Угадай число</h2><p>Я загадал число от 1 до 100</p><div class="input-group"><input type="number" id="guess-input" min="1" max="100" placeholder="Ваше число"></div><p id="guess-hint"></p><p id="guess-attempts">Попыток: 3</p><button class="btn-primary" id="submit-guess-btn">Угадать</button><button class="btn-secondary" id="close-guess-modal">Закрыть</button></div></div>
+    <div id="quiz-modal" class="modal" style="display: none;"><div class="modal-content glass-panel"><h2>📝 Викторина</h2><div id="quiz-content"></div><button class="btn-secondary" id="close-quiz-modal">Закрыть</button></div></div>
+    <div id="duel-modal" class="modal" style="display: none;"><div class="modal-content glass-panel"><h2>⚔️ Дуэль</h2><div id="duel-game-area"></div><button class="btn-secondary" id="close-duel-modal">Закрыть</button></div></div>
+    <div id="rps-bot-modal" class="modal" style="display: none;"><div class="modal-content glass-panel"><h2>✊ Камень-Ножницы-Бумага</h2><p>Выберите ваш ход:</p><div class="rps-buttons"><button class="rps-btn" data-move="rock">🪨 Камень</button><button class="rps-btn" data-move="scissors">✂️ Ножницы</button><button class="rps-btn" data-move="paper">📄 Бумага</button></div><p id="rps-bot-result"></p><button class="btn-secondary" id="close-rps-bot-modal">Закрыть</button></div></div>
   </div>
 
   <script src="script.js"></script>
