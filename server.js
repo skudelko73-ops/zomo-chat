@@ -7,13 +7,14 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socketIo(server, {
+  cors: { origin: "*", methods: ["GET", "POST"] }
+});
 
 const db = new sqlite3.Database('./database.db');
 
 // Создание таблиц
 db.serialize(() => {
-  // Пользователи
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     nickname TEXT UNIQUE,
@@ -25,27 +26,20 @@ db.serialize(() => {
     wheel_spin_date TEXT
   )`);
 
-  // Сообщения
   db.run(`CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     senderId TEXT,
     receiverId TEXT,
     content TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(senderId) REFERENCES users(id),
-    FOREIGN KEY(receiverId) REFERENCES users(id)
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  // Друзья
   db.run(`CREATE TABLE IF NOT EXISTS friends (
     userId TEXT,
     friendId TEXT,
-    PRIMARY KEY(userId, friendId),
-    FOREIGN KEY(userId) REFERENCES users(id),
-    FOREIGN KEY(friendId) REFERENCES users(id)
+    PRIMARY KEY(userId, friendId)
   )`);
 
-  // Серийчики (streaks)
   db.run(`CREATE TABLE IF NOT EXISTS streaks (
     userId TEXT,
     friendId TEXT,
@@ -54,27 +48,15 @@ db.serialize(() => {
     PRIMARY KEY(userId, friendId)
   )`);
 
-  // Купленные аксессуары
   db.run(`CREATE TABLE IF NOT EXISTS user_accessories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId TEXT,
     accessory_id TEXT,
-    x INTEGER DEFAULT 0,
-    y INTEGER DEFAULT 0,
-    equipped INTEGER DEFAULT 1,
-    FOREIGN KEY(userId) REFERENCES users(id)
+    x INTEGER DEFAULT 80,
+    y INTEGER DEFAULT 80,
+    equipped INTEGER DEFAULT 1
   )`);
 
-  // Купленные фоны
-  db.run(`CREATE TABLE IF NOT EXISTS user_backgrounds (
-    userId TEXT,
-    background_id TEXT,
-    equipped INTEGER DEFAULT 0,
-    PRIMARY KEY(userId, background_id),
-    FOREIGN KEY(userId) REFERENCES users(id)
-  )`);
-
-  // Дуэли
   db.run(`CREATE TABLE IF NOT EXISTS duels (
     id TEXT PRIMARY KEY,
     creatorId TEXT,
@@ -144,6 +126,7 @@ app.get('/api/user/:userId', (req, res) => {
   db.get('SELECT id, nickname, coins, avatar_emoji, theme FROM users WHERE id = ?',
     [req.params.userId], (err, user) => {
       if (err) return res.status(500).json({ error: 'Database error' });
+      if (!user) return res.status(404).json({ error: 'User not found' });
       res.json(user);
     });
 });
@@ -155,6 +138,7 @@ app.post('/api/daily-bonus', (req, res) => {
 
   db.get('SELECT daily_bonus_date, coins FROM users WHERE id = ?', [userId], (err, user) => {
     if (err) return res.status(500).json({ error: 'Database error' });
+    if (!user) return res.status(404).json({ error: 'User not found' });
     if (user.daily_bonus_date === today) {
       return res.json({ success: false, message: 'Уже получено сегодня' });
     }
@@ -175,6 +159,7 @@ app.post('/api/wheel-spin', (req, res) => {
 
   db.get('SELECT wheel_spin_date, coins FROM users WHERE id = ?', [userId], (err, user) => {
     if (err) return res.status(500).json({ error: 'Database error' });
+    if (!user) return res.status(404).json({ error: 'User not found' });
     if (user.wheel_spin_date === today) {
       return res.json({ success: false, message: 'Уже крутили сегодня' });
     }
@@ -185,7 +170,7 @@ app.post('/api/wheel-spin', (req, res) => {
       { type: 'coins', value: 50, weight: 20 },
       { type: 'coins', value: 75, weight: 15 },
       { type: 'coins', value: 100, weight: 9 },
-      { type: 'legendary', value: 'random', weight: 1 }
+      { type: 'legendary', value: 'crown', weight: 1 }
     ];
 
     const totalWeight = prizes.reduce((sum, p) => sum + p.weight, 0);
@@ -208,16 +193,12 @@ app.post('/api/wheel-spin', (req, res) => {
           res.json({ success: true, prize: { type: 'coins', value: prize.value }, coins: newCoins });
         });
     } else {
-      // Легендарный предмет
-      const legendaryItems = ['crown', 'halo', 'fire_aura', 'rainbow_trail', 'dragon_wings'];
-      const item = legendaryItems[Math.floor(Math.random() * legendaryItems.length)];
-
       db.run('INSERT OR IGNORE INTO user_accessories (userId, accessory_id) VALUES (?, ?)',
-        [userId, item], (err) => {
+        [userId, prize.value], (err) => {
           if (err) return res.status(500).json({ error: 'Database error' });
           db.run('UPDATE users SET wheel_spin_date = ? WHERE id = ?', [today, userId], (err) => {
             if (err) return res.status(500).json({ error: 'Database error' });
-            res.json({ success: true, prize: { type: 'legendary', value: item }, coins: user.coins });
+            res.json({ success: true, prize: { type: 'legendary', value: prize.value }, coins: user.coins });
           });
         });
     }
@@ -228,20 +209,21 @@ app.post('/api/wheel-spin', (req, res) => {
 app.get('/api/friends/:userId', (req, res) => {
   const { userId } = req.params;
   db.all(`
-    SELECT u.id, u.nickname, u.avatar_emoji, u.coins,
+    SELECT DISTINCT u.id, u.nickname, u.avatar_emoji, u.coins,
       (SELECT content FROM messages WHERE (senderId = ? AND receiverId = u.id) OR (senderId = u.id AND receiverId = ?) ORDER BY timestamp DESC LIMIT 1) as lastMessage
     FROM friends f
     JOIN users u ON (f.friendId = u.id AND f.userId = ?) OR (f.userId = u.id AND f.friendId = ?)
     WHERE f.userId = ? OR f.friendId = ?
   `, [userId, userId, userId, userId, userId, userId], (err, rows) => {
     if (err) return res.status(500).json({ error: 'Database error' });
-    res.json(rows);
+    res.json(rows || []);
   });
 });
 
 // Добавить друга
 app.post('/api/friends/add', (req, res) => {
   const { userId, friendId } = req.body;
+  if (!userId || !friendId) return res.status(400).json({ error: 'Missing IDs' });
   if (userId === friendId) return res.status(400).json({ error: 'Cannot add yourself' });
 
   db.get('SELECT id FROM users WHERE id = ?', [friendId], (err, row) => {
@@ -250,8 +232,8 @@ app.post('/api/friends/add', (req, res) => {
 
     db.run('INSERT OR IGNORE INTO friends (userId, friendId) VALUES (?, ?)', [userId, friendId], (err) => {
       if (err) return res.status(500).json({ error: 'Database error' });
-      db.run('INSERT OR IGNORE INTO streaks (userId, friendId) VALUES (?, ?)', [userId, friendId]);
-      db.run('INSERT OR IGNORE INTO streaks (userId, friendId) VALUES (?, ?)', [friendId, userId]);
+      db.run('INSERT OR IGNORE INTO streaks (userId, friendId, streak, last_message_date) VALUES (?, ?, 0, NULL)', [userId, friendId]);
+      db.run('INSERT OR IGNORE INTO streaks (userId, friendId, streak, last_message_date) VALUES (?, ?, 0, NULL)', [friendId, userId]);
       res.json({ success: true });
     });
   });
@@ -266,16 +248,16 @@ app.get('/api/messages/:userId/:friendId', (req, res) => {
     ORDER BY timestamp ASC
   `, [userId, friendId, friendId, userId], (err, rows) => {
     if (err) return res.status(500).json({ error: 'Database error' });
-    res.json(rows);
+    res.json(rows || []);
   });
 });
 
-// Получить аксессуары пользователя
+// Аксессуары
 app.get('/api/accessories/:userId', (req, res) => {
   db.all('SELECT * FROM user_accessories WHERE userId = ? AND equipped = 1',
     [req.params.userId], (err, rows) => {
       if (err) return res.status(500).json({ error: 'Database error' });
-      res.json(rows);
+      res.json(rows || []);
     });
 });
 
@@ -285,6 +267,7 @@ app.post('/api/buy-accessory', (req, res) => {
 
   db.get('SELECT coins FROM users WHERE id = ?', [userId], (err, user) => {
     if (err) return res.status(500).json({ error: 'Database error' });
+    if (!user) return res.status(404).json({ error: 'User not found' });
     if (user.coins < price) return res.status(400).json({ error: 'Недостаточно монет' });
 
     db.run('UPDATE users SET coins = coins - ? WHERE id = ?', [price, userId], (err) => {
@@ -292,13 +275,15 @@ app.post('/api/buy-accessory', (req, res) => {
       db.run('INSERT OR IGNORE INTO user_accessories (userId, accessory_id) VALUES (?, ?)',
         [userId, accessory_id], (err) => {
           if (err) return res.status(500).json({ error: 'Database error' });
-          res.json({ success: true, coins: user.coins - price });
+          db.get('SELECT coins FROM users WHERE id = ?', [userId], (err, row) => {
+            res.json({ success: true, coins: row.coins });
+          });
         });
     });
   });
 });
 
-// Обновить позицию аксессуара
+// Позиция аксессуара
 app.post('/api/accessory-position', (req, res) => {
   const { userId, accessory_id, x, y } = req.body;
   db.run('UPDATE user_accessories SET x = ?, y = ? WHERE userId = ? AND accessory_id = ?',
@@ -308,7 +293,7 @@ app.post('/api/accessory-position', (req, res) => {
     });
 });
 
-// Сменить тему
+// Тема
 app.post('/api/theme', (req, res) => {
   const { userId, theme } = req.body;
   db.run('UPDATE users SET theme = ? WHERE id = ?', [theme, userId], (err) => {
@@ -317,7 +302,7 @@ app.post('/api/theme', (req, res) => {
   });
 });
 
-// Сменить смайлик аватара
+// Смайлик
 app.post('/api/avatar-emoji', (req, res) => {
   const { userId, avatar_emoji } = req.body;
   db.run('UPDATE users SET avatar_emoji = ? WHERE id = ?', [avatar_emoji, userId], (err) => {
@@ -326,49 +311,16 @@ app.post('/api/avatar-emoji', (req, res) => {
   });
 });
 
-// Создать дуэль
-app.post('/api/duel/create', (req, res) => {
-  const { creatorId, opponentId, game_type, bet } = req.body;
-  const duelId = generateId() + generateId();
-
-  db.get('SELECT coins FROM users WHERE id = ?', [creatorId], (err, user) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    if (user.coins < bet) return res.status(400).json({ error: 'Недостаточно монет' });
-
-    db.run('UPDATE users SET coins = coins - ? WHERE id = ?', [bet, creatorId], (err) => {
+// Серийчик
+app.get('/api/streak/:userId/:friendId', (req, res) => {
+  const { userId, friendId } = req.params;
+  db.get('SELECT streak FROM streaks WHERE userId = ? AND friendId = ?',
+    [userId, friendId], (err, row) => {
       if (err) return res.status(500).json({ error: 'Database error' });
-      db.run(`INSERT INTO duels (id, creatorId, opponentId, game_type, bet, status)
-              VALUES (?, ?, ?, ?, ?, 'pending')`,
-        [duelId, creatorId, opponentId, game_type, bet], (err) => {
-          if (err) return res.status(500).json({ error: 'Database error' });
-          res.json({ duelId });
-        });
+      res.json({ streak: row?.streak || 0 });
     });
-  });
 });
 
-// Завершить дуэль
-app.post('/api/duel/complete', (req, res) => {
-  const { duelId, winnerId } = req.body;
-
-  db.get('SELECT * FROM duels WHERE id = ?', [duelId], (err, duel) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    if (!duel || duel.status !== 'pending') return res.status(400).json({ error: 'Invalid duel' });
-
-    const prize = Math.floor(duel.bet * 1.8); // 90% от общей ставки
-
-    db.run('UPDATE users SET coins = coins + ? WHERE id = ?', [prize, winnerId], (err) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      db.run('UPDATE duels SET status = ?, winnerId = ? WHERE id = ?',
-        ['completed', winnerId, duelId], (err) => {
-          if (err) return res.status(500).json({ error: 'Database error' });
-          res.json({ success: true, prize });
-        });
-    });
-  });
-});
-
-// Серийчики
 app.post('/api/streak/update', (req, res) => {
   const { userId, friendId } = req.body;
   const today = new Date().toISOString().split('T')[0];
@@ -399,11 +351,33 @@ app.post('/api/streak/update', (req, res) => {
   });
 });
 
+// Дуэли
+app.post('/api/duel/create', (req, res) => {
+  const { creatorId, opponentId, game_type, bet } = req.body;
+  const duelId = generateId() + generateId();
+
+  db.get('SELECT coins FROM users WHERE id = ?', [creatorId], (err, user) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.coins < bet) return res.status(400).json({ error: 'Недостаточно монет' });
+
+    db.run('UPDATE users SET coins = coins - ? WHERE id = ?', [bet, creatorId], (err) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      db.run(`INSERT INTO duels (id, creatorId, opponentId, game_type, bet, status)
+              VALUES (?, ?, ?, ?, ?, 'pending')`,
+        [duelId, creatorId, opponentId, game_type, bet], (err) => {
+          if (err) return res.status(500).json({ error: 'Database error' });
+          res.json({ duelId });
+        });
+    });
+  });
+});
+
 // WebSocket
 const onlineUsers = new Map();
 
 io.on('connection', (socket) => {
-  console.log('New client connected');
+  console.log('✅ Client connected');
 
   socket.on('login', (userId) => {
     onlineUsers.set(userId, socket.id);
@@ -418,7 +392,6 @@ io.on('connection', (socket) => {
     db.run('INSERT INTO messages (senderId, receiverId, content) VALUES (?, ?, ?)',
       [senderId, receiverId, content]);
 
-    // Добавляем монету за сообщение (макс 50 в день проверим на клиенте)
     db.run('UPDATE users SET coins = coins + 1 WHERE id = ?', [senderId]);
 
     const message = {
@@ -435,10 +408,23 @@ io.on('connection', (socket) => {
     socket.emit('new-message', message);
 
     // Обновление серийчика
-    fetch(`http://localhost:${PORT}/api/streak/update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: senderId, friendId: receiverId })
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+    db.get('SELECT * FROM streaks WHERE userId = ? AND friendId = ?', [senderId, receiverId], (err, streak) => {
+      if (err) return;
+      if (!streak) {
+        db.run('INSERT INTO streaks (userId, friendId, streak, last_message_date) VALUES (?, ?, 1, ?)',
+          [senderId, receiverId, today]);
+      } else if (streak.last_message_date !== today) {
+        if (streak.last_message_date === yesterday) {
+          db.run('UPDATE streaks SET streak = streak + 1, last_message_date = ? WHERE userId = ? AND friendId = ?',
+            [today, senderId, receiverId]);
+        } else {
+          db.run('UPDATE streaks SET streak = 1, last_message_date = ? WHERE userId = ? AND friendId = ?',
+            [today, senderId, receiverId]);
+        }
+      }
     });
   });
 
@@ -450,23 +436,16 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('duel-move', (data) => {
-    const { duelId, opponentId, move } = data;
-    const opponentSocketId = onlineUsers.get(opponentId);
-    if (opponentSocketId) {
-      io.to(opponentSocketId).emit('duel-move', { duelId, move });
-    }
-  });
-
   socket.on('disconnect', () => {
     if (socket.userId) {
       onlineUsers.delete(socket.userId);
       io.emit('user-status', { userId: socket.userId, online: false });
     }
+    console.log('❌ Client disconnected');
   });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
