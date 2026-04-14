@@ -331,7 +331,6 @@ function initSocket() {
     loadFriends(); refreshUserData();
   });
   
-  // WebRTC сигналы
   socket.on('incoming-call', async ({ from, offer }) => {
     pendingOffer = { from, offer };
     const friend = friends.find(f => f.id === from);
@@ -422,20 +421,37 @@ function cleanupCall() {
 
 // ==================== ЧАТЫ ====================
 async function loadFriends() {
-  const res = await fetch(`/api/friends/${currentUser.userId}`);
-  friends = await res.json();
-  renderFriendsList();
+  try {
+    const res = await fetch(`/api/friends/${currentUser.userId}`);
+    const data = await res.json();
+    friends = Array.isArray(data) ? data : [];
+    renderFriendsList();
+  } catch (err) {
+    console.error('Load friends error:', err);
+    friends = [];
+    renderFriendsList();
+  }
 }
 
 function renderFriendsList() {
-  if (!friends.length) { friendsListEl.innerHTML = '<p class="empty-text">Друзей пока нет</p>'; return; }
+  if (!friends || friends.length === 0) {
+    friendsListEl.innerHTML = '<p class="empty-text">Друзей пока нет</p>';
+    return;
+  }
+  
   friendsListEl.innerHTML = friends.map(f => `
     <div class="friend-item ${selectedFriend?.id === f.id ? 'active' : ''}" data-id="${f.id}">
       <div class="friend-avatar" style="${f.avatar_photo ? `background-image: url(${f.avatar_photo})` : ''}">${f.avatar_photo ? '' : (f.avatar_emoji || '😊')}</div>
-      <div class="friend-info"><div class="friend-name">${f.nickname}</div><div class="friend-last-message">${f.lastmessage || 'Начните общение'}</div></div>
+      <div class="friend-info">
+        <div class="friend-name">${f.nickname}</div>
+        <div class="friend-last-message">${f.lastmessage || 'Начните общение'}</div>
+      </div>
     </div>
   `).join('');
-  document.querySelectorAll('.friend-item').forEach(el => el.addEventListener('click', () => selectFriend(el.dataset.id)));
+  
+  document.querySelectorAll('.friend-item').forEach(el => {
+    el.addEventListener('click', () => selectFriend(el.dataset.id));
+  });
 }
 
 async function selectFriend(friendId) {
@@ -535,16 +551,31 @@ async function addFriend() {
   const friendId = friendIdInput.value.trim().toUpperCase();
   if (!friendId) return alert('Введите ID');
   if (friendId === currentUser.userId) return alert('Нельзя добавить себя');
+  
   try {
-    const res = await fetch('/api/friends/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, friendId }) });
-    if (!res.ok) throw new Error((await res.json()).error);
-    friendIdInput.value = ''; loadFriends(); alert('✅ Друг добавлен!');
-  } catch (err) { alert('❌ ' + err.message); }
+    const res = await fetch('/api/friends/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentUser.userId, friendId })
+    });
+    const data = await res.json();
+    
+    if (!res.ok) {
+      throw new Error(data.error || 'Ошибка при добавлении');
+    }
+    
+    friendIdInput.value = '';
+    await loadFriends();
+    alert('✅ Друг добавлен!');
+  } catch (err) {
+    alert('❌ ' + err.message);
+  }
 }
 
 function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 function showNotification(title, body) { if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body }); }
 async function refreshUserData() { if (!currentUser) return; const res = await fetch(`/api/user/${currentUser.userId}`); const data = await res.json(); currentUser.coins = data.coins; updateUserDisplay(); }
+
 // ==================== ПРОФИЛЬ И ИНВЕНТАРЬ ====================
 async function loadProfile() {
   profileNickname.textContent = currentUser.nickname;
