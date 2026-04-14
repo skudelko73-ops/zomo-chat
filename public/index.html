@@ -88,24 +88,29 @@
                   <button class="back-btn" id="mobile-back-btn">←</button>
                   <div class="chat-header-info">
                     <h3 id="chat-with-name">Выберите друга</h3>
-                    <span id="chat-with-status"></span>
-                  </div>
-                  <div class="streak-display" id="streak-display" style="display:none"><span>🔥</span><span id="streak-count">0</span></div>
-                </div>
-                <div id="messages-container" class="messages-container">
-                  <div class="empty-chat-message"><div class="empty-icon">💬</div><h4>Нет сообщений</h4></div>
-                </div>
-                <div class="chat-attachments">
-                  <button id="attach-image-btn" class="attach-btn">🖼️</button>
-                  <button id="voice-record-btn" class="attach-btn">🎤</button>
-                  <button id="sticker-btn" class="attach-btn">😊</button>
-                  <input type="file" id="image-input" accept="image/*" style="display:none">
-                </div>
-                <form id="message-form" class="message-input-container">
-                  <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off" disabled>
-                  <button type="submit" class="send-btn" disabled>➤</button>
-                </form>
-              </main>
+                   <span id="chat-with-status"></span>
+</div>
+<div class="streak-display" id="streak-display" style="display:none">
+  <span>🔥</span><span id="streak-count">0</span>
+</div>
+</div>
+<div id="messages-container" class="messages-container">
+  <div class="empty-chat-message">
+    <div class="empty-icon">💬</div>
+    <h4>Нет сообщений</h4>
+  </div>
+</div>
+<div class="chat-attachments">
+  <button type="button" id="attach-image-btn" class="attach-btn">+</button>
+  <button type="button" id="voice-record-btn" class="attach-btn">🎤</button>
+  <button type="button" id="sticker-btn" class="attach-btn">😊</button>
+  <input type="file" id="image-input" accept="image/*" style="display:none">
+</div>
+<form id="message-form" class="message-input-container">
+  <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off" disabled>
+  <button type="submit" class="send-btn" disabled>➤</button>
+</form>
+</main>
             </div>
           </div>
         </div>
