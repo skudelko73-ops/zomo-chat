@@ -24,6 +24,7 @@ const addFriendBtn = document.getElementById('add-friend-btn');
 const friendIdInput = document.getElementById('friend-id-input');
 const streakDisplay = document.getElementById('streak-display');
 const streakCount = document.getElementById('streak-count');
+const callBtn = document.getElementById('call-btn');
 
 const mobileChatsList = document.getElementById('mobile-chats-list');
 const mobileChatView = document.getElementById('mobile-chat-view');
@@ -43,9 +44,9 @@ const profileCoins = document.getElementById('profile-coins');
 const avatarBase = document.getElementById('avatar-base');
 const accessoriesLayer = document.getElementById('accessories-layer');
 const equippedList = document.getElementById('equipped-list');
+const inventoryList = document.getElementById('inventory-list');
 const uploadAvatarBtn = document.getElementById('upload-avatar-btn');
 const avatarPhotoInput = document.getElementById('avatar-photo-input');
-const removeAccessoryBtn = document.getElementById('remove-accessory-btn');
 
 const shopCoinsAmount = document.getElementById('shop-coins-amount');
 const shopItemsGrid = document.getElementById('shop-items-grid');
@@ -76,14 +77,20 @@ const guessNumberBtn = document.getElementById('guess-number-btn');
 const clickerBtn = document.getElementById('clicker-btn');
 const clickerCount = document.getElementById('clicker-count');
 const quizBtn = document.getElementById('quiz-btn');
+const quizTimer = document.getElementById('quiz-timer');
+
+const callModal = document.getElementById('call-modal');
+const callerName = document.getElementById('caller-name');
+const acceptCallBtn = document.getElementById('accept-call-btn');
+const rejectCallBtn = document.getElementById('reject-call-btn');
 
 // ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
 let currentUser = null;
 let socket = null;
 let selectedFriend = null;
 let friends = [];
-let currentStreak = 0;
 let equippedAccessories = [];
+let inventoryAccessories = [];
 let shopAccessories = [];
 let secretNumber = 0;
 let guessAttempts = 0;
@@ -91,6 +98,22 @@ let currentQuiz = [];
 let quizAnswers = [];
 let mediaRecorder = null;
 let audioChunks = [];
+let wheelSpinning = false;
+let quizCanPlay = true;
+
+// WebRTC
+let localStream = null;
+let peerConnection = null;
+let pendingOffer = null;
+let currentCall = { active: false, with: null };
+
+const rtcConfig = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.metered.ca:3478' }
+  ]
+};
 
 const emojiList = ['😊','😎','🥰','😇','🤓','🧐','🤩','😏','😈','👻','🐶','🐱','🦊','🐼','🐸','🐧','🦁','🐮','🐷','🐨','🌟','⭐','🌙','☀️','🌈','🔥','💧','❄️','⚡','💎'];
 
@@ -121,7 +144,7 @@ function init() {
   renderEmojiGrid('emoji-grid', 'selected-emoji');
   renderEmojiGrid('settings-emoji-grid', null);
   setupEventListeners();
-  checkTimers();
+  startTimers();
 }
 
 function renderEmojiGrid(containerId, hiddenInputId) {
@@ -147,8 +170,7 @@ function setupEventListeners() {
   
   menuItems.forEach(item => item.addEventListener('click', () => {
     const tab = item.dataset.tab;
-    menuItems.forEach(i => i.classList.remove('active'));
-    item.classList.add('active');
+    menuItems.forEach(i => i.classList.remove('active')); item.classList.add('active');
     tabs.forEach(t => t.classList.remove('active'));
     document.getElementById(`tab-${tab}`).classList.add('active');
     if (tab === 'profile') loadProfile();
@@ -168,23 +190,16 @@ function setupEventListeners() {
   
   attachImageBtn.addEventListener('click', () => imageInput.click());
   imageInput.addEventListener('change', uploadImage);
-  
   voiceRecordBtn.addEventListener('click', toggleVoiceRecord);
-  
-  stickerBtn.addEventListener('click', async () => {
-    await loadStickers();
-    stickerModal.style.display = 'flex';
-  });
+  stickerBtn.addEventListener('click', async () => { await loadStickers(); stickerModal.style.display = 'flex'; });
   closeStickerModal.addEventListener('click', () => stickerModal.style.display = 'none');
   
   uploadAvatarBtn.addEventListener('click', () => avatarPhotoInput.click());
   avatarPhotoInput.addEventListener('change', uploadAvatar);
-  removeAccessoryBtn.addEventListener('click', removeAllAccessories);
   
   document.querySelectorAll('.category-btn').forEach(btn => btn.addEventListener('click', () => {
     document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    renderShop(btn.dataset.category);
+    btn.classList.add('active'); renderShop(btn.dataset.category);
   }));
   
   wheelSpinBtn.addEventListener('click', () => wheelModal.style.display = 'flex');
@@ -200,11 +215,52 @@ function setupEventListeners() {
   closeQuizModal.addEventListener('click', () => quizModal.style.display = 'none');
   
   createDuelBtn.addEventListener('click', createDuel);
-  
   dailyBonusBtn.addEventListener('click', claimDailyBonus);
   saveEmojiBtn.addEventListener('click', saveAvatarEmoji);
   document.querySelectorAll('.theme-btn').forEach(btn => btn.addEventListener('click', () => changeTheme(btn.dataset.theme)));
   enableNotificationsBtn.addEventListener('click', enableNotifications);
+  
+  callBtn.addEventListener('click', startCall);
+  acceptCallBtn.addEventListener('click', acceptCall);
+  rejectCallBtn.addEventListener('click', rejectCall);
+  
+  document.querySelectorAll('.inventory-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.inventory-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const showEquipped = tab.dataset.tab === 'equipped';
+      document.getElementById('equipped-section').style.display = showEquipped ? 'block' : 'none';
+      document.getElementById('inventory-section').style.display = showEquipped ? 'none' : 'block';
+    });
+  });
+}
+
+function startTimers() {
+  setInterval(() => {
+    if (!currentUser) return;
+    const today = new Date().toISOString().split('T')[0];
+    const lastWheel = localStorage.getItem(`wheel_${currentUser.userId}`);
+    if (lastWheel !== today && wheelTimer) {
+      const next = new Date(); next.setDate(next.getDate() + 1); next.setHours(0,0,0,0);
+      const diff = next - new Date();
+      const hours = Math.floor(diff / 3600000); const mins = Math.floor((diff % 3600000) / 60000);
+      wheelTimer.textContent = `Доступно через ${hours}ч ${mins}м`;
+    } else if (wheelTimer) { wheelTimer.textContent = 'Доступно!'; }
+    
+    checkQuizAvailability();
+  }, 60000);
+  checkQuizAvailability();
+}
+
+async function checkQuizAvailability() {
+  if (!currentUser) return;
+  const res = await fetch(`/api/quiz/check?userId=${currentUser.userId}`);
+  const data = await res.json();
+  quizCanPlay = data.canPlay;
+  if (quizBtn) {
+    quizBtn.disabled = !quizCanPlay;
+    quizTimer.textContent = quizCanPlay ? 'Доступно!' : 'Подождите 3 часа';
+  }
 }
 
 // ==================== АВТОРИЗАЦИЯ ====================
@@ -221,8 +277,7 @@ async function handleRegister(e) {
     authMessage.textContent = `Аккаунт создан! ID: ${data.userId}`;
     setTimeout(() => { showLoginLink.click(); document.getElementById('login-nickname').value = nickname; }, 2000);
   } catch (err) {
-    authMessage.style.color = 'var(--accent-danger)';
-    authMessage.textContent = err.message;
+    authMessage.style.color = 'var(--accent-danger)'; authMessage.textContent = err.message;
   }
 }
 
@@ -235,16 +290,11 @@ async function handleLogin(e) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
     currentUser = data;
-    authContainer.style.display = 'none';
-    mainContainer.style.display = 'flex';
-    updateUserDisplay();
-    initSocket();
-    loadFriends();
+    authContainer.style.display = 'none'; mainContainer.style.display = 'flex';
+    updateUserDisplay(); initSocket(); loadFriends();
     applyTheme(currentUser.theme || 'dark');
-    checkDailyBonusOnLogin();
   } catch (err) {
-    authMessage.style.color = 'var(--accent-danger)';
-    authMessage.textContent = err.message;
+    authMessage.style.color = 'var(--accent-danger)'; authMessage.textContent = err.message;
   }
 }
 
@@ -252,23 +302,21 @@ function updateUserDisplay() {
   menuNickname.textContent = currentUser.nickname;
   menuCoins.textContent = `🪙 ${currentUser.coins || 0}`;
   if (currentUser.avatar_photo) {
-    menuAvatar.style.backgroundImage = `url(${currentUser.avatar_photo})`;
-    menuAvatar.textContent = '';
+    menuAvatar.style.backgroundImage = `url(${currentUser.avatar_photo})`; menuAvatar.textContent = '';
   } else {
-    menuAvatar.style.backgroundImage = '';
-    menuAvatar.textContent = currentUser.avatar_emoji || '😊';
+    menuAvatar.style.backgroundImage = ''; menuAvatar.textContent = currentUser.avatar_emoji || '😊';
   }
 }
 
 function logout() {
   if (socket) socket.disconnect();
+  if (currentCall.active) endCall();
   currentUser = null; selectedFriend = null;
-  authContainer.style.display = 'block';
-  mainContainer.style.display = 'none';
+  authContainer.style.display = 'block'; mainContainer.style.display = 'none';
   loginForm.reset(); registerForm.reset();
 }
 
-// ==================== SOCKET ====================
+// ==================== SOCKET + WebRTC ====================
 function initSocket() {
   socket = io();
   socket.on('connect', () => socket.emit('login', currentUser.userId));
@@ -279,26 +327,97 @@ function initSocket() {
     }
   });
   socket.on('new-message', (message) => {
-    if (selectedFriend && (message.senderId === selectedFriend.id || message.receiverId === selectedFriend.id)) {
-      appendMessage(message);
-    }
-    loadFriends();
-    refreshUserData();
+    if (selectedFriend && (message.senderId === selectedFriend.id || message.receiverId === selectedFriend.id)) appendMessage(message);
+    loadFriends(); refreshUserData();
   });
-  socket.on('push-notification', (data) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(data.title, { body: data.body, icon: data.icon });
-    }
+  
+  // WebRTC сигналы
+  socket.on('incoming-call', async ({ from, offer }) => {
+    pendingOffer = { from, offer };
+    const friend = friends.find(f => f.id === from);
+    callerName.textContent = friend?.nickname || 'Неизвестный';
+    callModal.style.display = 'flex';
+  });
+  
+  socket.on('call-accepted', async ({ answer }) => {
+    if (peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    callModal.style.display = 'none';
+    currentCall.active = true;
+    showNotification('Звонок', 'Соединение установлено');
+  });
+  
+  socket.on('ice-candidate', async ({ candidate }) => {
+    if (peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+  });
+  
+  socket.on('call-rejected', () => {
+    callModal.style.display = 'none';
+    showNotification('Звонок', 'Абонент отклонил звонок');
+    cleanupCall();
+  });
+  
+  socket.on('call-ended', () => {
+    showNotification('Звонок', 'Звонок завершён');
+    cleanupCall();
   });
 }
 
-async function refreshUserData() {
-  if (!currentUser) return;
-  const res = await fetch(`/api/user/${currentUser.userId}`);
-  const data = await res.json();
-  currentUser.coins = data.coins;
-  currentUser.avatar_photo = data.avatar_photo;
-  updateUserDisplay();
+async function startCall() {
+  if (!selectedFriend) return;
+  localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  peerConnection = new RTCPeerConnection(rtcConfig);
+  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+  
+  peerConnection.onicecandidate = (e) => {
+    if (e.candidate) socket.emit('ice-candidate', { targetId: selectedFriend.id, candidate: e.candidate });
+  };
+  
+  peerConnection.ontrack = (e) => {
+    const audio = new Audio(); audio.srcObject = e.streams[0]; audio.play();
+  };
+  
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+  socket.emit('call-user', { targetId: selectedFriend.id, offer });
+  showNotification('Звонок', 'Вызов отправлен...');
+  currentCall = { active: true, with: selectedFriend.id };
+}
+
+async function acceptCall() {
+  if (!pendingOffer) return;
+  localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  peerConnection = new RTCPeerConnection(rtcConfig);
+  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+  
+  peerConnection.onicecandidate = (e) => {
+    if (e.candidate) socket.emit('ice-candidate', { targetId: pendingOffer.from, candidate: e.candidate });
+  };
+  
+  peerConnection.ontrack = (e) => { const audio = new Audio(); audio.srcObject = e.streams[0]; audio.play(); };
+  
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(pendingOffer.offer));
+  const answer = await peerConnection.createAnswer();
+  await peerConnection.setLocalDescription(answer);
+  socket.emit('call-accept', { targetId: pendingOffer.from, answer });
+  callModal.style.display = 'none';
+  currentCall = { active: true, with: pendingOffer.from };
+}
+
+function rejectCall() {
+  if (pendingOffer) socket.emit('call-reject', { targetId: pendingOffer.from });
+  callModal.style.display = 'none';
+  pendingOffer = null;
+}
+
+function endCall() {
+  if (currentCall.with) socket.emit('call-end', { targetId: currentCall.with });
+  cleanupCall();
+}
+
+function cleanupCall() {
+  if (localStream) localStream.getTracks().forEach(t => t.stop());
+  if (peerConnection) peerConnection.close();
+  localStream = null; peerConnection = null; currentCall = { active: false, with: null };
 }
 
 // ==================== ЧАТЫ ====================
@@ -309,7 +428,7 @@ async function loadFriends() {
 }
 
 function renderFriendsList() {
-  if (friends.length === 0) { friendsListEl.innerHTML = '<p class="empty-text">Друзей пока нет</p>'; return; }
+  if (!friends.length) { friendsListEl.innerHTML = '<p class="empty-text">Друзей пока нет</p>'; return; }
   friendsListEl.innerHTML = friends.map(f => `
     <div class="friend-item ${selectedFriend?.id === f.id ? 'active' : ''}" data-id="${f.id}">
       <div class="friend-avatar" style="${f.avatar_photo ? `background-image: url(${f.avatar_photo})` : ''}">${f.avatar_photo ? '' : (f.avatar_emoji || '😊')}</div>
@@ -324,11 +443,9 @@ async function selectFriend(friendId) {
   if (!selectedFriend) return;
   chatWithNameEl.textContent = selectedFriend.nickname;
   messageInput.disabled = false; sendBtn.disabled = false;
+  callBtn.style.display = 'block';
   
-  if (window.innerWidth <= 768) {
-    mobileChatView.classList.add('active');
-    mobileChatsList.style.display = 'none';
-  }
+  if (window.innerWidth <= 768) { mobileChatView.classList.add('active'); mobileChatsList.style.display = 'none'; }
   
   const msgRes = await fetch(`/api/messages/${currentUser.userId}/${friendId}`);
   renderMessages(await msgRes.json());
@@ -336,21 +453,16 @@ async function selectFriend(friendId) {
 }
 
 function renderMessages(messages) {
-  if (messages.length === 0) {
+  if (!messages.length) {
     messagesContainer.innerHTML = '<div class="empty-chat-message"><div class="empty-icon">💬</div><h4>Нет сообщений</h4></div>';
     return;
   }
   messagesContainer.innerHTML = messages.map(m => {
     const isSent = m.senderId === currentUser.userId;
     const time = new Date(m.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    
-    if (m.type === 'image') {
-      return `<div class="message ${isSent ? 'sent' : 'received'}"><img src="${m.file_url}" class="message-image" onclick="window.open('${m.file_url}')"><div class="message-time">${time}</div></div>`;
-    } else if (m.type === 'voice') {
-      return `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-voice"><button onclick="playAudio('${m.file_url}')">▶️</button><span>${m.content}</span></div><div class="message-time">${time}</div></div>`;
-    } else {
-      return `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-content">${escapeHtml(m.content)}</div><div class="message-time">${time}</div></div>`;
-    }
+    if (m.type === 'image') return `<div class="message ${isSent ? 'sent' : 'received'}"><img src="${m.file_url}" class="message-image" onclick="window.open('${m.file_url}')"><div class="message-time">${time}</div></div>`;
+    if (m.type === 'voice') return `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-voice"><button onclick="playAudio('${m.file_url}')">▶️</button><span>${m.content}</span></div><div class="message-time">${time}</div></div>`;
+    return `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-content">${escapeHtml(m.content)}</div><div class="message-time">${time}</div></div>`;
   }).join('');
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
@@ -360,15 +472,10 @@ function appendMessage(msg) {
   if (empty) empty.remove();
   const isSent = msg.senderId === currentUser.userId;
   const time = new Date(msg.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  
   let html = '';
-  if (msg.type === 'image') {
-    html = `<div class="message ${isSent ? 'sent' : 'received'}"><img src="${msg.file_url}" class="message-image" onclick="window.open('${msg.file_url}')"><div class="message-time">${time}</div></div>`;
-  } else if (msg.type === 'voice') {
-    html = `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-voice"><button onclick="playAudio('${msg.file_url}')">▶️</button><span>${msg.content}</span></div><div class="message-time">${time}</div></div>`;
-  } else {
-    html = `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-content">${escapeHtml(msg.content)}</div><div class="message-time">${time}</div></div>`;
-  }
+  if (msg.type === 'image') html = `<div class="message ${isSent ? 'sent' : 'received'}"><img src="${msg.file_url}" class="message-image" onclick="window.open('${msg.file_url}')"><div class="message-time">${time}</div></div>`;
+  else if (msg.type === 'voice') html = `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-voice"><button onclick="playAudio('${msg.file_url}')">▶️</button><span>${msg.content}</span></div><div class="message-time">${time}</div></div>`;
+  else html = `<div class="message ${isSent ? 'sent' : 'received'}"><div class="message-content">${escapeHtml(msg.content)}</div><div class="message-time">${time}</div></div>`;
   messagesContainer.insertAdjacentHTML('beforeend', html);
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
@@ -385,51 +492,34 @@ async function uploadImage() {
   const file = imageInput.files[0];
   if (!file || !selectedFriend) return;
   const formData = new FormData();
-  formData.append('image', file);
-  formData.append('senderId', currentUser.userId);
-  formData.append('receiverId', selectedFriend.id);
-  
+  formData.append('image', file); formData.append('senderId', currentUser.userId); formData.append('receiverId', selectedFriend.id);
   const res = await fetch('/api/upload-chat-image', { method: 'POST', body: formData });
   const data = await res.json();
-  if (data.success) {
-    socket.emit('send-message', { senderId: currentUser.userId, receiverId: selectedFriend.id, content: '📷 Изображение', type: 'image', fileUrl: data.fileUrl });
-  }
+  if (data.success) socket.emit('send-message', { senderId: currentUser.userId, receiverId: selectedFriend.id, content: '📷 Изображение', type: 'image', fileUrl: data.fileUrl });
   imageInput.value = '';
 }
 
 async function toggleVoiceRecord() {
   if (!mediaRecorder) {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
-    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream); audioChunks = [];
     mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
     mediaRecorder.onstop = async () => {
       const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
       const formData = new FormData();
-      formData.append('audio', audioBlob, 'voice.webm');
-      formData.append('senderId', currentUser.userId);
-      formData.append('receiverId', selectedFriend.id);
-      formData.append('duration', Math.round(audioChunks.length * 0.1));
-      
+      formData.append('audio', audioBlob, 'voice.webm'); formData.append('senderId', currentUser.userId); formData.append('receiverId', selectedFriend.id); formData.append('duration', Math.round(audioChunks.length * 0.1));
       const res = await fetch('/api/upload-voice', { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.success) {
-        socket.emit('send-message', { senderId: currentUser.userId, receiverId: selectedFriend.id, content: `🎤 Голосовое`, type: 'voice', fileUrl: data.fileUrl });
-      }
+      if (data.success) socket.emit('send-message', { senderId: currentUser.userId, receiverId: selectedFriend.id, content: `🎤 Голосовое`, type: 'voice', fileUrl: data.fileUrl });
     };
-    mediaRecorder.start();
-    voiceRecordBtn.textContent = '⏹️';
+    mediaRecorder.start(); voiceRecordBtn.textContent = '⏹️';
   } else {
-    mediaRecorder.stop();
-    mediaRecorder.stream.getTracks().forEach(t => t.stop());
-    mediaRecorder = null;
-    voiceRecordBtn.textContent = '🎤';
+    mediaRecorder.stop(); mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    mediaRecorder = null; voiceRecordBtn.textContent = '🎤';
   }
 }
 
-function playAudio(url) {
-  new Audio(url).play();
-}
+function playAudio(url) { new Audio(url).play(); }
 
 async function loadStickers() {
   const res = await fetch('/api/stickers');
@@ -448,14 +538,14 @@ async function addFriend() {
   try {
     const res = await fetch('/api/friends/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, friendId }) });
     if (!res.ok) throw new Error((await res.json()).error);
-    friendIdInput.value = '';
-    loadFriends();
+    friendIdInput.value = ''; loadFriends(); alert('✅ Друг добавлен!');
   } catch (err) { alert('❌ ' + err.message); }
 }
 
 function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
-
-// ==================== ПРОФИЛЬ ====================
+function showNotification(title, body) { if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body }); }
+async function refreshUserData() { if (!currentUser) return; const res = await fetch(`/api/user/${currentUser.userId}`); const data = await res.json(); currentUser.coins = data.coins; updateUserDisplay(); }
+// ==================== ПРОФИЛЬ И ИНВЕНТАРЬ ====================
 async function loadProfile() {
   profileNickname.textContent = currentUser.nickname;
   profileId.textContent = currentUser.userId;
@@ -467,14 +557,25 @@ async function loadProfile() {
     avatarBase.style.backgroundImage = '';
     avatarBase.textContent = currentUser.avatar_emoji || '😊';
   }
+  await loadAccessories();
+  await loadInventory();
+}
+
+async function loadAccessories() {
   const res = await fetch(`/api/accessories/${currentUser.userId}`);
   equippedAccessories = await res.json();
   renderAccessories();
+  renderEquippedList();
+}
+
+async function loadInventory() {
+  const res = await fetch(`/api/inventory/${currentUser.userId}`);
+  inventoryAccessories = await res.json();
+  renderInventoryList();
 }
 
 function renderAccessories() {
   accessoriesLayer.innerHTML = '';
-  equippedList.innerHTML = '';
   equippedAccessories.forEach(acc => {
     const accData = shopAccessories.find(a => a.id === acc.accessory_id);
     if (!accData) return;
@@ -489,8 +590,50 @@ function renderAccessories() {
     makeDraggable(el);
     addScaleControls(el);
     accessoriesLayer.appendChild(el);
-    equippedList.innerHTML += `<span class="equipped-badge">${accData.icon} ${accData.name}</span>`;
   });
+}
+
+function renderEquippedList() {
+  equippedList.innerHTML = '';
+  equippedAccessories.forEach(acc => {
+    const accData = shopAccessories.find(a => a.id === acc.accessory_id);
+    if (!accData) return;
+    const item = document.createElement('div');
+    item.className = 'inventory-item';
+    item.innerHTML = `<span>${accData.icon} ${accData.name}</span><button data-id="${acc.accessory_id}" class="unequip-btn">Снять</button>`;
+    item.querySelector('.unequip-btn').addEventListener('click', () => toggleAccessory(acc.accessory_id, false));
+    equippedList.appendChild(item);
+  });
+}
+
+function renderInventoryList() {
+  inventoryList.innerHTML = '';
+  if (!inventoryAccessories.length) {
+    inventoryList.innerHTML = '<p class="empty-text">Инвентарь пуст</p>';
+    return;
+  }
+  inventoryAccessories.forEach(acc => {
+    const accData = shopAccessories.find(a => a.id === acc.accessory_id);
+    if (!accData) return;
+    const item = document.createElement('div');
+    item.className = 'inventory-item';
+    item.innerHTML = `<span>${accData.icon} ${accData.name}</span><button data-id="${acc.accessory_id}" class="equip-btn">Надеть</button>`;
+    item.querySelector('.equip-btn').addEventListener('click', () => toggleAccessory(acc.accessory_id, true));
+    inventoryList.appendChild(item);
+  });
+}
+
+async function toggleAccessory(accessoryId, equip) {
+  await fetch('/api/accessory-toggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: currentUser.userId, accessory_id: accessoryId, equipped: equip ? 1 : 0 })
+  });
+  await loadAccessories();
+  await loadInventory();
+  renderAccessories();
+  renderEquippedList();
+  renderInventoryList();
 }
 
 function makeDraggable(el) {
@@ -500,10 +643,8 @@ function makeDraggable(el) {
   function getBounds() { const r = container.getBoundingClientRect(); return { minX: 0, maxX: r.width, minY: 0, maxY: r.height }; }
   
   function startDrag(cX, cY) {
-    isDragging = true;
-    startX = cX; startY = cY;
-    startLeft = parseInt(el.style.left) || 80;
-    startTop = parseInt(el.style.top) || 80;
+    isDragging = true; startX = cX; startY = cY;
+    startLeft = parseInt(el.style.left) || 80; startTop = parseInt(el.style.top) || 80;
     el.style.cursor = 'grabbing';
   }
   
@@ -513,14 +654,12 @@ function makeDraggable(el) {
     const bounds = getBounds();
     let newLeft = Math.max(bounds.minX, Math.min(startLeft + dx, bounds.maxX - 30));
     let newTop = Math.max(bounds.minY, Math.min(startTop + dy, bounds.maxY - 30));
-    el.style.left = newLeft + 'px';
-    el.style.top = newTop + 'px';
+    el.style.left = newLeft + 'px'; el.style.top = newTop + 'px';
   }
   
   async function endDrag() {
     if (!isDragging) return;
-    isDragging = false;
-    el.style.cursor = 'grab';
+    isDragging = false; el.style.cursor = 'grab';
     await fetch('/api/accessory-update', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: currentUser.userId, accessory_id: el.dataset.id, x: parseInt(el.style.left), y: parseInt(el.style.top), scale: parseFloat(el.dataset.scale) || 1.0 })
@@ -542,10 +681,13 @@ function addScaleControls(el) {
   el.appendChild(controls);
   controls.style.display = 'none';
   
-  el.addEventListener('click', () => {
+  const showControls = () => {
     document.querySelectorAll('.accessory-controls').forEach(c => c.style.display = 'none');
     controls.style.display = 'flex';
-  });
+  };
+  
+  el.addEventListener('click', showControls);
+  el.addEventListener('dblclick', showControls);
   
   controls.querySelector('[data-action="minus"]').addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -572,30 +714,17 @@ async function uploadAvatar() {
   const file = avatarPhotoInput.files[0];
   if (!file) return;
   const formData = new FormData();
-  formData.append('avatar', file);
-  formData.append('userId', currentUser.userId);
+  formData.append('avatar', file); formData.append('userId', currentUser.userId);
   const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData });
   const data = await res.json();
-  if (data.success) {
-    currentUser.avatar_photo = data.avatar_photo;
-    updateUserDisplay();
-    loadProfile();
-  }
-}
-
-async function removeAllAccessories() {
-  for (const acc of equippedAccessories) {
-    await fetch('/api/accessory-toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, accessory_id: acc.accessory_id, equipped: 0 }) });
-  }
-  equippedAccessories = [];
-  renderAccessories();
+  if (data.success) { currentUser.avatar_photo = data.avatar_photo; updateUserDisplay(); loadProfile(); }
 }
 
 // ==================== МАГАЗИН ====================
 function renderShop(cat = 'all') {
   shopCoinsAmount.textContent = currentUser.coins || 0;
   const filtered = cat === 'all' ? shopAccessories : shopAccessories.filter(a => a.category === cat);
-  const owned = equippedAccessories.map(a => a.accessory_id);
+  const owned = [...equippedAccessories, ...inventoryAccessories].map(a => a.accessory_id);
   shopItemsGrid.innerHTML = filtered.map(item => `
     <div class="shop-item rarity-${item.rarity} ${owned.includes(item.id) ? 'owned' : ''}" data-id="${item.id}" data-price="${item.price}">
       <div class="shop-item-icon">${item.icon}</div><div class="shop-item-name">${item.name}</div><div class="shop-item-price">${item.price} 🪙</div>
@@ -610,22 +739,16 @@ async function buyAccessory(id, price) {
     const res = await fetch('/api/buy-accessory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, accessory_id: id, price }) });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    currentUser.coins = data.coins;
-    updateUserDisplay();
-    equippedAccessories.push({ accessory_id: id, x: 80, y: 80, scale: 1.0 });
+    currentUser.coins = data.coins; updateUserDisplay();
+    await loadAccessories(); await loadInventory();
     renderShop(document.querySelector('.category-btn.active').dataset.category);
   } catch (err) { alert('❌ ' + err.message); }
 }
 
 // ==================== ИГРЫ ====================
-function checkTimers() {
-  const today = new Date().toISOString().split('T')[0];
-  const lastWheel = localStorage.getItem(`wheel_${currentUser?.userId}`);
-  if (lastWheel === today && wheelSpinBtn) wheelSpinBtn.disabled = true;
-}
-
 async function spinWheel() {
-  spinWheelBtn.disabled = true;
+  if (wheelSpinning) return;
+  spinWheelBtn.disabled = true; wheelSpinning = true;
   const ctx = wheelCanvas.getContext('2d');
   const prizes = [10, 25, 50, 75, 100, '🎁'];
   const colors = ['#6c5ce7','#a463f5','#00d68f','#ffaa00','#ff3d71','#ffd700'];
@@ -640,12 +763,11 @@ async function spinWheel() {
       fetch('/api/wheel-spin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId }) })
         .then(r => r.json()).then(d => {
           if (d.success) {
-            currentUser.coins = d.coins;
-            updateUserDisplay();
+            currentUser.coins = d.coins; updateUserDisplay();
             wheelResult.textContent = d.prize.type === 'coins' ? `+${d.prize.value} 🪙` : `🎁 ${d.prize.value}`;
             localStorage.setItem(`wheel_${currentUser.userId}`, new Date().toISOString().split('T')[0]);
-          }
-          spinWheelBtn.disabled = false;
+          } else alert(d.message);
+          spinWheelBtn.disabled = false; wheelSpinning = false;
         });
     }
   };
@@ -664,11 +786,9 @@ function drawWheel(ctx, prizes, colors, rot) {
 }
 
 async function startGuessNumber() {
-  const res = await fetch('/api/guess-number', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId }) });
+  const res = await fetch('/api/guess-number');
   const data = await res.json();
-  if (!data.success) return alert(data.message);
-  secretNumber = data.secretNumber;
-  guessAttempts = 3;
+  secretNumber = data.secretNumber; guessAttempts = 3;
   document.getElementById('guess-attempts').textContent = `Попыток: ${guessAttempts}`;
   document.getElementById('guess-hint').textContent = '';
   guessModal.style.display = 'flex';
@@ -683,8 +803,7 @@ async function submitGuess() {
     const prize = Math.max(10, 50 - (2 - guessAttempts) * 10);
     const res = await fetch('/api/guess-number/win', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, attempts: 3 - guessAttempts }) });
     const data = await res.json();
-    currentUser.coins = data.coins;
-    updateUserDisplay();
+    currentUser.coins = data.coins; updateUserDisplay();
     hint.textContent = `🎉 Правильно! +${prize} 🪙`;
     setTimeout(() => guessModal.style.display = 'none', 2000);
   } else {
@@ -697,16 +816,15 @@ async function submitGuess() {
 async function doClicker() {
   const res = await fetch('/api/clicker', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId }) });
   const data = await res.json();
-  if (data.success) {
-    currentUser.coins = data.coins;
-    updateUserDisplay();
-    clickerCount.textContent = `${data.count}/50`;
-  } else alert(data.message);
+  if (data.success) { currentUser.coins = data.coins; updateUserDisplay(); clickerCount.textContent = `${data.count}/50`; }
+  else alert(data.message);
 }
 
 async function startQuiz() {
+  if (!quizCanPlay) return alert('Викторина доступна раз в 3 часа');
   const res = await fetch('/api/quiz');
   currentQuiz = await res.json();
+  quizAnswers = [];
   renderQuizQuestion(0);
   quizModal.style.display = 'flex';
 }
@@ -715,23 +833,21 @@ function renderQuizQuestion(idx) {
   if (idx >= currentQuiz.length) return finishQuiz();
   const q = currentQuiz[idx];
   const content = document.getElementById('quiz-content');
-  content.innerHTML = `<h3>${q.question}</h3>`;
-  q.options.forEach((opt, i) => {
-    content.innerHTML += `<button class="quiz-option" data-idx="${idx}" data-opt="${i}">${opt}</button>`;
-  });
+  content.innerHTML = `<h3>${q.q}</h3>`;
+  q.opts.forEach((opt, i) => content.innerHTML += `<button class="quiz-option" data-opt="${i}">${opt}</button>`);
   document.querySelectorAll('.quiz-option').forEach(btn => btn.addEventListener('click', e => {
-    quizAnswers.push({ idx: parseInt(btn.dataset.idx), answer: parseInt(btn.dataset.opt) });
+    quizAnswers.push(parseInt(btn.dataset.opt));
     renderQuizQuestion(idx + 1);
   }));
 }
 
 async function finishQuiz() {
-  const correct = currentQuiz.filter((q, i) => quizAnswers[i]?.answer === q.correct).length;
+  const correct = currentQuiz.filter((q, i) => quizAnswers[i] === q.correct).length;
   const res = await fetch('/api/quiz/win', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, correctAnswers: correct }) });
   const data = await res.json();
-  currentUser.coins = data.coins;
-  updateUserDisplay();
+  currentUser.coins = data.coins; updateUserDisplay();
   document.getElementById('quiz-content').innerHTML = `<h3>🎉 Правильно: ${correct}/3</h3><p>+${data.prize} 🪙</p>`;
+  checkQuizAvailability();
   setTimeout(() => quizModal.style.display = 'none', 2000);
 }
 
@@ -762,11 +878,8 @@ async function saveAvatarEmoji() {
   const selected = document.querySelector('#settings-emoji-grid .emoji-option.selected');
   if (!selected) return;
   await fetch('/api/avatar-emoji', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, avatar_emoji: selected.dataset.emoji }) });
-  currentUser.avatar_emoji = selected.dataset.emoji;
-  currentUser.avatar_photo = null;
-  updateUserDisplay();
-  avatarBase.style.backgroundImage = '';
-  avatarBase.textContent = selected.dataset.emoji;
+  currentUser.avatar_emoji = selected.dataset.emoji; currentUser.avatar_photo = null;
+  updateUserDisplay(); avatarBase.style.backgroundImage = ''; avatarBase.textContent = selected.dataset.emoji;
 }
 
 async function changeTheme(theme) {
@@ -776,49 +889,20 @@ async function changeTheme(theme) {
 
 function applyTheme(theme) { document.body.setAttribute('data-theme', theme); localStorage.setItem('theme', theme); }
 
-function checkDailyBonusOnLogin() {
-  const last = localStorage.getItem(`daily_${currentUser.userId}`);
-  const today = new Date().toISOString().split('T')[0];
-  if (last !== today) setTimeout(() => { if (confirm('🎁 Ежедневный бонус 25 🪙!')) claimDailyBonus(); }, 1000);
-}
-
 async function enableNotifications() {
   if ('Notification' in window) {
     const perm = await Notification.requestPermission();
-    if (perm === 'granted') {
-      navigator.serviceWorker?.register('/sw.js');
-      alert('✅ Уведомления включены!');
-    }
+    if (perm === 'granted') { navigator.serviceWorker?.register('/sw.js'); alert('✅ Уведомления включены!'); }
   }
 }
 
 // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
-setInterval(() => {
-  if (!currentUser) return;
-  const today = new Date().toISOString().split('T')[0];
-  const lastWheel = localStorage.getItem(`wheel_${currentUser.userId}`);
-  if (lastWheel !== today && wheelTimer) {
-    const next = new Date(); next.setDate(next.getDate() + 1); next.setHours(0,0,0,0);
-    const diff = next - new Date();
-    const hours = Math.floor(diff / 3600000);
-    const mins = Math.floor((diff % 3600000) / 60000);
-    wheelTimer.textContent = `Доступно через ${hours}ч ${mins}м`;
-  } else if (wheelTimer) {
-    wheelTimer.textContent = 'Доступно!';
-  }
-}, 60000);
-
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('.accessory-item')) {
-    document.querySelectorAll('.accessory-controls').forEach(c => c.style.display = 'none');
-  }
+  if (!e.target.closest('.accessory-item')) document.querySelectorAll('.accessory-controls').forEach(c => c.style.display = 'none');
 });
 
 const style = document.createElement('style');
 style.textContent = `
-  .accessory-controls { position: absolute; bottom: -35px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; background: var(--glass-bg); padding: 4px 8px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid var(--glass-border); z-index: 100; }
-  .accessory-scale-btn { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-primary); border: none; color: white; font-weight: bold; cursor: pointer; font-size: 16px; }
-  .accessory-scale-value { color: var(--text-primary); font-size: 12px; font-weight: 600; min-width: 35px; text-align: center; }
   .quiz-option { display: block; width: 100%; padding: 12px; margin: 8px 0; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text-primary); cursor: pointer; }
   .quiz-option:hover { background: var(--accent-primary); }
 `;
@@ -828,4 +912,4 @@ window.playAudio = function(url) { new Audio(url).play(); };
 
 // ==================== ЗАПУСК ====================
 init();
-console.log('✅ ZOMO CHAT v2.5 загружен!');
+console.log('✅ ZOMO CHAT v3.0 загружен!');
