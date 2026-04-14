@@ -30,15 +30,24 @@ const pool = new Pool({
 
 async function initDB() {
   try {
+    // Создаём таблицу если её нет
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         nickname TEXT UNIQUE,
-        password TEXT,
-        avatar_photo TEXT,
-        theme TEXT DEFAULT 'dark'
+        password TEXT
       )
     `);
+    
+    // Добавляем недостающие колонки (игнорируем ошибки если уже есть)
+    try {
+      await pool.query('ALTER TABLE users ADD COLUMN avatar_photo TEXT');
+    } catch (e) { /* уже есть */ }
+    
+    try {
+      await pool.query('ALTER TABLE users ADD COLUMN theme TEXT DEFAULT \'dark\'');
+    } catch (e) { /* уже есть */ }
+    
     await pool.query(`
       CREATE TABLE IF NOT EXISTS messages (
         id SERIAL PRIMARY KEY,
@@ -51,6 +60,7 @@ async function initDB() {
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    
     await pool.query(`
       CREATE TABLE IF NOT EXISTS friends (
         userId TEXT,
@@ -58,6 +68,7 @@ async function initDB() {
         PRIMARY KEY(userId, friendId)
       )
     `);
+    
     await pool.query(`
       CREATE TABLE IF NOT EXISTS calls (
         id SERIAL PRIMARY KEY,
@@ -67,6 +78,7 @@ async function initDB() {
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    
     console.log('✅ Database ready');
   } catch (err) {
     console.error('❌ DB error:', err);
@@ -164,14 +176,37 @@ app.get('/api/friends/:userId', async (req, res) => {
 
 app.post('/api/friends/add', async (req, res) => {
   const { userId, friendId } = req.body;
-  if (userId === friendId) return res.status(400).json({ error: 'Cannot add yourself' });
+  
+  console.log('Add friend:', userId, '->', friendId);
+  
+  if (!userId || !friendId) {
+    return res.status(400).json({ error: 'Missing userId or friendId' });
+  }
+  if (userId === friendId) {
+    return res.status(400).json({ error: 'Cannot add yourself' });
+  }
+  
   try {
     const check = await pool.query('SELECT id FROM users WHERE id = $1', [friendId]);
-    if (check.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    await pool.query('INSERT INTO friends (userId, friendId) VALUES ($1, $2) ON CONFLICT DO NOTHING', [userId, friendId]);
-    res.json({ success: true });
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+    
+    const existing = await pool.query(
+      'SELECT * FROM friends WHERE (userId = $1 AND friendId = $2) OR (userId = $2 AND friendId = $1)',
+      [userId, friendId]
+    );
+    
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Уже в друзьях' });
+    }
+    
+    await pool.query('INSERT INTO friends (userId, friendId) VALUES ($1, $2)', [userId, friendId]);
+    console.log('✅ Friend added');
+    res.json({ success: true, message: 'Друг добавлен' });
   } catch (err) {
-    res.status(500).json({ error: 'Database error' });
+    console.error('Add friend error:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
@@ -180,21 +215,31 @@ app.get('/api/messages/:userId/:friendId', async (req, res) => {
   const { userId, friendId } = req.params;
   try {
     await pool.query('UPDATE messages SET read = true WHERE senderId = $1 AND receiverId = $2 AND read = false', [friendId, userId]);
-    const result = await pool.query(`
-      SELECT * FROM messages WHERE (senderId = $1 AND receiverId = $2) OR (senderId = $2 AND receiverId = $1) ORDER BY timestamp ASC
-    `, [userId, friendId]);
+    const result = await pool.query(
+      'SELECT * FROM messages WHERE (senderId = $1 AND receiverId = $2) OR (senderId = $2 AND receiverId = $1) ORDER BY timestamp ASC',
+      [userId, friendId]
+    );
     res.json(result.rows || []);
   } catch (err) {
+    console.error('Messages error:', err);
     res.json([]);
   }
 });
 
-app.get('/api/unread/:userId', async (req, res) => {
+app.get('/api/calls/:userId', async (req, res) => {
   try {
-    const result = await pool.query('SELECT COUNT(*) FROM messages WHERE receiverId = $1 AND read = false', [req.params.userId]);
-    res.json({ count: parseInt(result.rows[0].count) || 0 });
+    const result = await pool.query(`
+      SELECT c.*, u.nickname as caller_name, u2.nickname as receiver_name
+      FROM calls c
+      JOIN users u ON c.callerId = u.id
+      JOIN users u2 ON c.receiverId = u2.id
+      WHERE callerId = $1 OR receiverId = $1
+      ORDER BY timestamp DESC LIMIT 50
+    `, [req.params.userId]);
+    res.json(result.rows);
   } catch (err) {
-    res.json({ count: 0 });
+    console.error('Calls error:', err);
+    res.json([]);
   }
 });
 
@@ -211,11 +256,10 @@ app.post('/api/upload-voice', upload.single('audio'), async (req, res) => {
   const { senderId, receiverId, duration } = req.body;
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const fileUrl = '/uploads/' + req.file.filename;
-  await pool.query('INSERT INTO messages (senderId, receiverId, content, type, file_url) VALUES ($1, $2, $3, $4, $5)',
-    [senderId, receiverId, `🎤 Голосовое (${duration}с)`, 'voice', fileUrl]);
+  await pool.query('INSERT INTO messages (senderId, receiverId, content, type, file_url) VALUES ($1, $2, $3, $4, $5)', 
+    [senderId, receiverId, 🎤 Голосовое (${duration}с), 'voice', fileUrl]);
   res.json({ success: true, fileUrl });
 });
-
 // ==================== ЗВОНКИ ====================
 app.get('/api/calls/:userId', async (req, res) => {
   try {
