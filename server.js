@@ -47,7 +47,6 @@ async function initDB() {
         theme TEXT DEFAULT 'dark',
         daily_bonus_date TEXT,
         wheel_spin_date TEXT,
-        guess_number_date TEXT,
         clicker_count INTEGER DEFAULT 0,
         clicker_date TEXT,
         quiz_date TEXT
@@ -189,41 +188,26 @@ app.get('/api/user/:userId', async (req, res) => {
 app.post('/api/upload-avatar', upload.single('avatar'), async (req, res) => {
   const { userId } = req.body;
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-
   const fileUrl = '/uploads/' + req.file.filename;
-  try {
-    await pool.query('UPDATE users SET avatar_photo = $1, avatar_emoji = NULL WHERE id = $2', [fileUrl, userId]);
-    res.json({ success: true, avatar_photo: fileUrl });
-  } catch (err) {
-    res.status(500).json({ error: 'Database error' });
-  }
+  await pool.query('UPDATE users SET avatar_photo = $1, avatar_emoji = NULL WHERE id = $2', [fileUrl, userId]);
+  res.json({ success: true, avatar_photo: fileUrl });
 });
 
 app.post('/api/avatar-emoji', async (req, res) => {
   const { userId, avatar_emoji } = req.body;
-  try {
-    await pool.query('UPDATE users SET avatar_emoji = $1, avatar_photo = NULL WHERE id = $2', [avatar_emoji, userId]);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Database error' });
-  }
+  await pool.query('UPDATE users SET avatar_emoji = $1, avatar_photo = NULL WHERE id = $2', [avatar_emoji, userId]);
+  res.json({ success: true });
 });
 
 app.post('/api/theme', async (req, res) => {
-  const { userId, theme } = req.body;
-  try {
-    await pool.query('UPDATE users SET theme = $1 WHERE id = $2', [theme, userId]);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Database error' });
-  }
+  await pool.query('UPDATE users SET theme = $1 WHERE id = $2', [req.body.theme, req.body.userId]);
+  res.json({ success: true });
 });
 
 // ==================== БОНУСЫ И ИГРЫ ====================
 app.post('/api/daily-bonus', async (req, res) => {
   const { userId } = req.body;
   const today = new Date().toISOString().split('T')[0];
-
   try {
     const result = await pool.query('SELECT daily_bonus_date, coins FROM users WHERE id = $1', [userId]);
     const user = result.rows[0];
@@ -241,7 +225,6 @@ app.post('/api/daily-bonus', async (req, res) => {
 app.post('/api/wheel-spin', async (req, res) => {
   const { userId } = req.body;
   const today = new Date().toISOString().split('T')[0];
-
   try {
     const result = await pool.query('SELECT wheel_spin_date, coins FROM users WHERE id = $1', [userId]);
     const user = result.rows[0];
@@ -264,7 +247,7 @@ app.post('/api/wheel-spin', async (req, res) => {
       await pool.query('UPDATE users SET coins = $1, wheel_spin_date = $2 WHERE id = $3', [newCoins, today, userId]);
       res.json({ success: true, prize: { type: 'coins', value: prize.value }, coins: newCoins });
     } else {
-      await pool.query('INSERT INTO user_accessories (userId, accessory_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [userId, prize.value]);
+      await pool.query('INSERT INTO user_accessories (userId, accessory_id, equipped) VALUES ($1, $2, 1) ON CONFLICT DO NOTHING', [userId, prize.value]);
       await pool.query('UPDATE users SET wheel_spin_date = $1 WHERE id = $2', [today, userId]);
       res.json({ success: true, prize: { type: 'legendary', value: prize.value }, coins: user.coins });
     }
@@ -273,44 +256,9 @@ app.post('/api/wheel-spin', async (req, res) => {
   }
 });
 
-// Угадай число
-app.post('/api/guess-number', async (req, res) => {
-  const { userId } = req.body;
-  const today = new Date().toISOString().split('T')[0];
-
-  try {
-    const result = await pool.query('SELECT guess_number_date FROM users WHERE id = $1', [userId]);
-    const user = result.rows[0];
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (user.guess_number_date === today) return res.json({ success: false, message: 'Уже играли сегодня' });
-
-    const secretNumber = Math.floor(Math.random() * 100) + 1;
-    await pool.query('UPDATE users SET guess_number_date = $1 WHERE id = $2', [today, userId]);
-    res.json({ success: true, secretNumber });
-  } catch (err) {
-    res.status(500).json({ error: 'Database error' });
-  }
-});
-
-app.post('/api/guess-number/win', async (req, res) => {
-  const { userId, attempts } = req.body;
-  const prize = Math.max(10, 50 - (attempts - 1) * 10);
-
-  try {
-    const result = await pool.query('SELECT coins FROM users WHERE id = $1', [userId]);
-    const newCoins = result.rows[0].coins + prize;
-    await pool.query('UPDATE users SET coins = $1 WHERE id = $2', [newCoins, userId]);
-    res.json({ success: true, prize, coins: newCoins });
-  } catch (err) {
-    res.status(500).json({ error: 'Database error' });
-  }
-});
-
-// Кликер
 app.post('/api/clicker', async (req, res) => {
   const { userId } = req.body;
   const today = new Date().toISOString().split('T')[0];
-
   try {
     const result = await pool.query('SELECT clicker_count, clicker_date, coins FROM users WHERE id = $1', [userId]);
     const user = result.rows[0];
@@ -333,20 +281,64 @@ app.post('/api/clicker', async (req, res) => {
   }
 });
 
-// Викторина
+// Викторина — 20+ вопросов
+const quizQuestions = [
+  { q: 'Сколько будет 2+2?', opts: ['3', '4', '5'], correct: 1 },
+  { q: 'Столица Франции?', opts: ['Лондон', 'Берлин', 'Париж'], correct: 2 },
+  { q: 'Сколько дней в неделе?', opts: ['5', '6', '7'], correct: 2 },
+  { q: 'Кто написал "Войну и мир"?', opts: ['Достоевский', 'Толстой', 'Пушкин'], correct: 1 },
+  { q: 'Самая высокая гора?', opts: ['К2', 'Эверест', 'Килиманджаро'], correct: 1 },
+  { q: 'Сколько планет в Солнечной системе?', opts: ['7', '8', '9'], correct: 1 },
+  { q: 'Химический символ воды?', opts: ['O2', 'CO2', 'H2O'], correct: 2 },
+  { q: 'Самый большой океан?', opts: ['Атлантический', 'Индийский', 'Тихий'], correct: 2 },
+  { q: 'Год первого полёта в космос?', opts: ['1961', '1965', '1957'], correct: 0 },
+  { q: 'Сколько цветов в радуге?', opts: ['5', '7', '9'], correct: 1 }
+];
+
 app.get('/api/quiz', (req, res) => {
-  const questions = [
-    { question: 'Сколько будет 2+2?', options: ['3', '4', '5'], correct: 1 },
-    { question: 'Столица Франции?', options: ['Лондон', 'Берлин', 'Париж'], correct: 2 },
-    { question: 'Сколько дней в неделе?', options: ['5', '6', '7'], correct: 2 }
-  ];
-  res.json(questions);
+  const shuffled = [...quizQuestions].sort(() => Math.random() - 0.5);
+  res.json(shuffled.slice(0, 3));
 });
 
 app.post('/api/quiz/win', async (req, res) => {
   const { userId, correctAnswers } = req.body;
   const prize = correctAnswers * 15;
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const result = await pool.query('SELECT coins FROM users WHERE id = $1', [userId]);
+    const newCoins = result.rows[0].coins + prize;
+    await pool.query('UPDATE users SET coins = $1, quiz_date = $2 WHERE id = $3', [newCoins, today, userId]);
+    res.json({ success: true, prize, coins: newCoins });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
 
+app.get('/api/quiz/check', async (req, res) => {
+  const { userId } = req.query;
+  try {
+    const result = await pool.query('SELECT quiz_date FROM users WHERE id = $1', [userId]);
+    const lastDate = result.rows[0]?.quiz_date;
+    if (!lastDate) return res.json({ canPlay: true });
+    
+    const last = new Date(lastDate);
+    const now = new Date();
+    const diff = (now - last) / (1000 * 60 * 60);
+    res.json({ canPlay: diff >= 3 });
+  } catch (err) {
+    res.json({ canPlay: true });
+  }
+});
+
+// Угадай число — без ограничений
+app.get('/api/guess-number', (req, res) => {
+  const secret = Math.floor(Math.random() * 100) + 1;
+  res.json({ secretNumber: secret });
+});
+
+app.post('/api/guess-number/win', async (req, res) => {
+  const { userId, attempts } = req.body;
+  const prize = Math.max(10, 50 - (attempts - 1) * 10);
   try {
     const result = await pool.query('SELECT coins FROM users WHERE id = $1', [userId]);
     const newCoins = result.rows[0].coins + prize;
@@ -378,11 +370,9 @@ app.get('/api/friends/:userId', async (req, res) => {
 app.post('/api/friends/add', async (req, res) => {
   const { userId, friendId } = req.body;
   if (userId === friendId) return res.status(400).json({ error: 'Cannot add yourself' });
-
   try {
     const check = await pool.query('SELECT id FROM users WHERE id = $1', [friendId]);
     if (check.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-
     await pool.query('INSERT INTO friends (userId, friendId) VALUES ($1, $2) ON CONFLICT DO NOTHING', [userId, friendId]);
     res.json({ success: true });
   } catch (err) {
@@ -427,10 +417,19 @@ app.post('/api/upload-voice', upload.single('audio'), async (req, res) => {
   res.json({ success: true, fileUrl });
 });
 
-// ==================== АКСЕССУАРЫ ====================
+// ==================== АКСЕССУАРЫ И ИНВЕНТАРЬ ====================
 app.get('/api/accessories/:userId', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM user_accessories WHERE userId = $1 AND equipped = 1', [req.params.userId]);
+    res.json(result.rows || []);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
+app.get('/api/inventory/:userId', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM user_accessories WHERE userId = $1 AND equipped = 0', [req.params.userId]);
     res.json(result.rows || []);
   } catch (err) {
     res.json([]);
@@ -450,7 +449,7 @@ app.post('/api/buy-accessory', async (req, res) => {
     if (user.rows[0].coins < price) return res.status(400).json({ error: 'Недостаточно монет' });
 
     await pool.query('UPDATE users SET coins = coins - $1 WHERE id = $2', [price, userId]);
-    await pool.query('INSERT INTO user_accessories (userId, accessory_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [userId, accessory_id]);
+    await pool.query('INSERT INTO user_accessories (userId, accessory_id, equipped) VALUES ($1, $2, 1) ON CONFLICT DO NOTHING', [userId, accessory_id]);
     const newCoins = await pool.query('SELECT coins FROM users WHERE id = $1', [userId]);
     res.json({ success: true, coins: newCoins.rows[0].coins });
   } catch (err) {
@@ -469,7 +468,6 @@ app.post('/api/accessory-update', async (req, res) => {
 app.post('/api/duel/create', async (req, res) => {
   const { creatorId, opponentId, game_type, bet } = req.body;
   const duelId = generateId() + generateId();
-
   try {
     const user = await pool.query('SELECT coins FROM users WHERE id = $1', [creatorId]);
     if (user.rows[0].coins < bet) return res.status(400).json({ error: 'Недостаточно монет' });
@@ -500,59 +498,29 @@ app.get('/admin', (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html>
-    <head>
-      <title>ZOMO CHAT - Админ</title>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <style>
-        body { font-family: Inter, sans-serif; background: #0b0e14; color: white; padding: 40px; }
-        .container { max-width: 600px; margin: 0 auto; background: rgba(20,25,35,0.75); padding: 30px; border-radius: 24px; }
-        h1 { color: #6c5ce7; }
-        input, button { padding: 12px; margin: 8px 0; border-radius: 12px; border: 1px solid #333; background: #1a1f2c; color: white; width: 100%; }
-        button { background: #6c5ce7; cursor: pointer; font-weight: bold; }
-        button:hover { background: #a463f5; }
-        .section { margin: 30px 0; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 16px; }
-      </style>
+    <head><title>ZOMO CHAT - Админ</title><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>body{font-family:Inter,sans-serif;background:#0b0e14;color:#fff;padding:40px}.container{max-width:600px;margin:0 auto;background:rgba(20,25,35,0.75);padding:30px;border-radius:24px}h1{color:#6c5ce7}input,button{padding:12px;margin:8px 0;border-radius:12px;border:1px solid #333;background:#1a1f2c;color:#fff;width:100%}button{background:#6c5ce7;cursor:pointer}button:hover{background:#a463f5}.section{margin:30px 0;padding:20px;background:rgba(0,0,0,0.2);border-radius:16px}</style>
     </head>
-    <body>
-      <div class="container">
-        <h1>🎮 ZOMO CHAT Админ</h1>
-        <div class="section">
-          <h2>📷 Загрузить стикер</h2>
-          <form action="/admin/upload-sticker" method="POST" enctype="multipart/form-data">
-            <input type="file" name="sticker" accept="image/*" required>
-            <button type="submit">Загрузить стикер</button>
-          </form>
-        </div>
-        <div class="section">
-          <h2>😊 Загрузить смайлик для аватара</h2>
-          <form action="/admin/upload-emoji" method="POST" enctype="multipart/form-data">
-            <input type="file" name="emoji" accept="image/*" required>
-            <input type="text" name="name" placeholder="Название смайлика" required>
-            <button type="submit">Загрузить смайлик</button>
-          </form>
-        </div>
-      </div>
-    </body>
-    </html>
+    <body><div class="container"><h1>🎮 ZOMO CHAT Админ</h1>
+    <div class="section"><h2>📷 Загрузить стикер</h2><form action="/admin/upload-sticker" method="POST" enctype="multipart/form-data"><input type="file" name="sticker" accept="image/*" required><button>Загрузить</button></form></div>
+    <div class="section"><h2>😊 Загрузить смайлик</h2><form action="/admin/upload-emoji" method="POST" enctype="multipart/form-data"><input type="file" name="emoji" accept="image/*" required><input type="text" name="name" placeholder="Название" required><button>Загрузить</button></form></div>
+    </div></body></html>
   `);
 });
 
 app.post('/admin/upload-sticker', upload.single('sticker'), async (req, res) => {
   if (!req.file) return res.status(400).send('Нет файла');
-  const url = '/uploads/' + req.file.filename;
-  await pool.query('INSERT INTO stickers (url) VALUES ($1)', [url]);
+  await pool.query('INSERT INTO stickers (url) VALUES ($1)', ['/uploads/' + req.file.filename]);
   res.redirect('/admin');
 });
 
 app.post('/admin/upload-emoji', upload.single('emoji'), async (req, res) => {
   if (!req.file) return res.status(400).send('Нет файла');
-  const url = '/uploads/' + req.file.filename;
-  await pool.query('INSERT INTO stickers (url, category) VALUES ($1, $2)', [url, 'emoji']);
+  await pool.query('INSERT INTO stickers (url, category) VALUES ($1, $2)', ['/uploads/' + req.file.filename, 'emoji']);
   res.redirect('/admin');
 });
 
-// ==================== WEBSOCKET ====================
+// ==================== WEBSOCKET + ЗВОНКИ ====================
 const onlineUsers = new Map();
 
 io.on('connection', (socket) => {
@@ -567,20 +535,59 @@ io.on('connection', (socket) => {
   socket.on('send-message', async (data) => {
     const { senderId, receiverId, content, type, fileUrl } = data;
     if (!senderId || !receiverId) return;
-
     try {
       await pool.query(
         'INSERT INTO messages (senderId, receiverId, content, type, file_url) VALUES ($1, $2, $3, $4, $5)',
         [senderId, receiverId, content, type || 'text', fileUrl]
       );
       await pool.query('UPDATE users SET coins = coins + 1 WHERE id = $1', [senderId]);
-
       const message = { senderId, receiverId, content, type, fileUrl, timestamp: new Date().toISOString() };
       const receiverSocket = onlineUsers.get(receiverId);
       if (receiverSocket) io.to(receiverSocket).emit('new-message', message);
       socket.emit('new-message', message);
     } catch (err) {
       console.error('Message error:', err);
+    }
+  });
+
+  // Голосовые звонки
+  socket.on('call-user', (data) => {
+    const { targetId, offer } = data;
+    const targetSocket = onlineUsers.get(targetId);
+    if (targetSocket) {
+      io.to(targetSocket).emit('incoming-call', { from: socket.userId, offer });
+    }
+  });
+
+  socket.on('call-accept', (data) => {
+    const { targetId, answer } = data;
+    const targetSocket = onlineUsers.get(targetId);
+    if (targetSocket) {
+      io.to(targetSocket).emit('call-accepted', { from: socket.userId, answer });
+    }
+  });
+
+  socket.on('ice-candidate', (data) => {
+    const { targetId, candidate } = data;
+    const targetSocket = onlineUsers.get(targetId);
+    if (targetSocket) {
+      io.to(targetSocket).emit('ice-candidate', { from: socket.userId, candidate });
+    }
+  });
+
+  socket.on('call-reject', (data) => {
+    const { targetId } = data;
+    const targetSocket = onlineUsers.get(targetId);
+    if (targetSocket) {
+      io.to(targetSocket).emit('call-rejected', { from: socket.userId });
+    }
+  });
+
+  socket.on('call-end', (data) => {
+    const { targetId } = data;
+    const targetSocket = onlineUsers.get(targetId);
+    if (targetSocket) {
+      io.to(targetSocket).emit('call-ended', { from: socket.userId });
     }
   });
 
