@@ -152,42 +152,67 @@ app.post('/api/theme', async (req, res) => {
 
 // ==================== ДРУЗЬЯ ====================
 app.get('/api/friends/:userId', async (req, res) => {
+  const { userId } = req.params;
+  console.log('📋 Getting friends for:', userId);
+  
   try {
     const result = await pool.query(`
-      SELECT DISTINCT u.id, u.nickname, u.avatar_photo,
+      SELECT DISTINCT u.id, u.nickname, u."avatar_photo",
         (SELECT content FROM messages WHERE ((senderId = $1 AND receiverId = u.id) OR (senderId = u.id AND receiverId = $1)) ORDER BY timestamp DESC LIMIT 1) as lastMessage,
         (SELECT COUNT(*) FROM messages WHERE senderId = u.id AND receiverId = $1 AND read = false) as unread
       FROM friends f
-      JOIN users u ON (f.friendId = u.id AND f.userId = $1) OR (f.userId = u.id AND f.friendId = $1)
-      WHERE f.userId = $1 OR f.friendId = $1
-    `, [req.params.userId]);
+      JOIN users u ON (f."friendId" = u.id AND f."userId" = $1) OR (f."userId" = u.id AND f."friendId" = $1)
+      WHERE f."userId" = $1 OR f."friendId" = $1
+    `, [userId]);
+    
+    console.log('✅ Friends found:', result.rows.length);
     res.json(result.rows || []);
   } catch (err) {
-    console.error('Friends error:', err);
+    console.error('❌ Friends error:', err);
     res.json([]);
   }
 });
 
 app.post('/api/friends/add', async (req, res) => {
   const { userId, friendId } = req.body;
-  if (!userId || !friendId) return res.status(400).json({ error: 'Missing IDs' });
-  if (userId === friendId) return res.status(400).json({ error: 'Cannot add yourself' });
+  
+  console.log('➕ Add friend request:', userId, '->', friendId);
+  
+  if (!userId || !friendId) {
+    return res.status(400).json({ error: 'Missing IDs' });
+  }
+  if (userId === friendId) {
+    return res.status(400).json({ error: 'Cannot add yourself' });
+  }
   
   try {
+    // Проверяем, существует ли пользователь
     const check = await pool.query('SELECT id FROM users WHERE id = $1', [friendId]);
-    if (check.rows.length === 0) return res.status(404).json({ error: 'Пользователь не найден' });
+    if (check.rows.length === 0) {
+      console.log('❌ User not found:', friendId);
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
     
+    // Проверяем, не друзья ли уже
     const existing = await pool.query(
-      'SELECT * FROM friends WHERE (userId = $1 AND friendId = $2) OR (userId = $2 AND friendId = $1)',
+      'SELECT * FROM friends WHERE ("userId" = $1 AND "friendId" = $2) OR ("userId" = $2 AND "friendId" = $1)',
       [userId, friendId]
     );
-    if (existing.rows.length > 0) return res.status(400).json({ error: 'Уже в друзьях' });
     
-    await pool.query('INSERT INTO friends (userId, friendId) VALUES ($1, $2)', [userId, friendId]);
+    if (existing.rows.length > 0) {
+      console.log('⚠️ Already friends');
+      return res.status(400).json({ error: 'Уже в друзьях' });
+    }
+    
+    // Добавляем друга
+    await pool.query('INSERT INTO friends ("userId", "friendId") VALUES ($1, $2)', [userId, friendId]);
+    
+    console.log('✅ Friend added successfully!');
     res.json({ success: true, message: 'Друг добавлен' });
+    
   } catch (err) {
-    console.error('Add friend error:', err);
-    res.status(500).json({ error: 'Ошибка сервера' });
+    console.error('❌ Add friend error:', err);
+    res.status(500).json({ error: 'Ошибка сервера: ' + err.message });
   }
 });
 
