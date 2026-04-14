@@ -88,6 +88,7 @@ let shopAccessories = [];
 let secretNumber = 0;
 let guessAttempts = 0;
 let currentQuiz = [];
+let quizAnswers = [];
 let mediaRecorder = null;
 let audioChunks = [];
 
