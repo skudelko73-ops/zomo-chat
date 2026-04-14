@@ -141,7 +141,8 @@ app.post('/api/upload-avatar', upload.single('avatar'), async (req, res) => {
   const { userId } = req.body;
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const fileUrl = '/uploads/' + req.file.filename;
-  await pool.query('UPDATE users SET avatar_photo = $1 WHERE id = $2', [fileUrl, userId]);
+  console.log('📷 Avatar uploaded:', fileUrl);
+  await pool.query('UPDATE users SET "avatar_photo" = $1 WHERE id = $2', [fileUrl, userId]);
   res.json({ success: true, avatar_photo: fileUrl });
 });
 
