@@ -564,8 +564,19 @@ async function addFriend() {
       throw new Error(data.error || 'Ошибка при добавлении');
     }
     
+    if (data.success === false) {
+      throw new Error(data.error);
+    }
+    
     friendIdInput.value = '';
-    await loadFriends();
+    await loadFriends(); // ← ВАЖНО: обновляем список
+    
+    // Принудительно обновляем список друзей
+    setTimeout(async () => {
+      await loadFriends();
+      renderFriendsList();
+    }, 300);
+    
     alert('✅ Друг добавлен!');
   } catch (err) {
     alert('❌ ' + err.message);
@@ -708,26 +719,41 @@ function makeDraggable(el) {
 function addScaleControls(el) {
   const controls = document.createElement('div');
   controls.className = 'accessory-controls';
-  controls.innerHTML = `<button class="accessory-scale-btn" data-action="minus">−</button><span class="accessory-scale-value">${el.dataset.scale || 1.0}x</span><button class="accessory-scale-btn" data-action="plus">+</button>`;
+  controls.innerHTML = <button class="accessory-scale-btn" data-action="minus">−</button><span class="accessory-scale-value">${el.dataset.scale || 1.0}x</span><button class="accessory-scale-btn" data-action="plus">+</button>;
   el.appendChild(controls);
   controls.style.display = 'none';
   
-  const showControls = () => {
+  // Показывать контролы при КЛИКЕ (для ПК) и ДВОЙНОМ ТАПЕ (для телефона)
+  const showControls = (e) => {
+    e.stopPropagation();
     document.querySelectorAll('.accessory-controls').forEach(c => c.style.display = 'none');
     controls.style.display = 'flex';
   };
   
   el.addEventListener('click', showControls);
-  el.addEventListener('dblclick', showControls);
+  
+  // Для телефона: долгое нажатие (500мс) тоже показывает контролы
+  let longPressTimer;
+  el.addEventListener('touchstart', (e) => {
+    longPressTimer = setTimeout(() => {
+      showControls(e);
+    }, 500);
+  });
+  el.addEventListener('touchend', () => clearTimeout(longPressTimer));
+  el.addEventListener('touchmove', () => clearTimeout(longPressTimer));
   
   controls.querySelector('[data-action="minus"]').addEventListener('click', async (e) => {
     e.stopPropagation();
     let scale = parseFloat(el.dataset.scale) || 1.0;
     scale = Math.max(0.5, scale - 0.1);
     el.dataset.scale = scale;
-    el.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    el.style.transform = translate(-50%, -50%) scale(${scale});
     controls.querySelector('.accessory-scale-value').textContent = scale.toFixed(1) + 'x';
-    await fetch('/api/accessory-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, accessory_id: el.dataset.id, x: parseInt(el.style.left), y: parseInt(el.style.top), scale }) });
+    await fetch('/api/accessory-update', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ userId: currentUser.userId, accessory_id: el.dataset.id, x: parseInt(el.style.left), y: parseInt(el.style.top), scale }) 
+    });
   });
   
   controls.querySelector('[data-action="plus"]').addEventListener('click', async (e) => {
@@ -735,9 +761,13 @@ function addScaleControls(el) {
     let scale = parseFloat(el.dataset.scale) || 1.0;
     scale = Math.min(2.0, scale + 0.1);
     el.dataset.scale = scale;
-    el.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    el.style.transform = translate(-50%, -50%) scale(${scale});
     controls.querySelector('.accessory-scale-value').textContent = scale.toFixed(1) + 'x';
-    await fetch('/api/accessory-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUser.userId, accessory_id: el.dataset.id, x: parseInt(el.style.left), y: parseInt(el.style.top), scale }) });
+    await fetch('/api/accessory-update', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ userId: currentUser.userId, accessory_id: el.dataset.id, x: parseInt(el.style.left), y: parseInt(el.style.top), scale }) 
+    });
   });
 }
 
