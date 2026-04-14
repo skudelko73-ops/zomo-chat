@@ -40,6 +40,18 @@ async function initDB() {
       )
     `);
     
+    // УДАЛЯЕМ старую таблицу friends
+    await pool.query(`DROP TABLE IF EXISTS friends CASCADE`);
+    
+    // СОЗДАЁМ новую с правильными колонками
+    await pool.query(`
+      CREATE TABLE friends (
+        "userId" TEXT,
+        "friendId" TEXT,
+        PRIMARY KEY("userId", "friendId")
+      )
+    `);
+    
     await pool.query(`
       CREATE TABLE IF NOT EXISTS messages (
         id SERIAL PRIMARY KEY,
@@ -54,14 +66,6 @@ async function initDB() {
     `);
     
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS friends (
-        "userId" TEXT,
-        "friendId" TEXT,
-        PRIMARY KEY("userId", "friendId")
-      )
-    `);
-    
-    await pool.query(`
       CREATE TABLE IF NOT EXISTS calls (
         id SERIAL PRIMARY KEY,
         "callerId" TEXT,
@@ -71,12 +75,11 @@ async function initDB() {
       )
     `);
     
-    console.log('✅ Database ready');
+    console.log('✅ Database ready (friends table recreated)');
   } catch (err) {
     console.error('❌ DB error:', err);
   }
 }
-initDB();
 
 app.use(express.static('public'));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
