@@ -71,7 +71,7 @@ function init() {
   setupEventListeners();
   const savedTheme = localStorage.getItem('theme') || 'dark';
   document.body.setAttribute('data-theme', savedTheme);
-  themeSelect.value = savedTheme;
+  if (themeSelect) themeSelect.value = savedTheme;
 }
 
 function setupEventListeners() {
@@ -125,7 +125,9 @@ function setupEventListeners() {
   avatarInput.addEventListener('change', uploadAvatar);
   saveNicknameBtn.addEventListener('click', saveNickname);
   
-  themeSelect.addEventListener('change', (e) => changeTheme(e.target.value));
+  if (themeSelect) {
+    themeSelect.addEventListener('change', (e) => changeTheme(e.target.value));
+  }
   enableNotificationsBtn.addEventListener('click', enableNotifications);
   logoutBtn.addEventListener('click', logout);
 }
@@ -187,9 +189,9 @@ async function handleLogin(e) {
 }
 
 function updateProfileDisplay() {
-  profileNickname.value = currentUser.nickname || '';
-  profileId.textContent = currentUser.userId;
-  if (currentUser.avatar_photo) {
+  if (profileNickname) profileNickname.value = currentUser.nickname || '';
+  if (profileId) profileId.textContent = currentUser.userId;
+  if (profileAvatar && currentUser.avatar_photo) {
     profileAvatar.src = currentUser.avatar_photo;
   }
 }
@@ -218,7 +220,6 @@ function initSocket() {
       chatWithStatusEl.textContent = '● В сети';
       chatWithStatusEl.style.color = 'var(--success)';
     }
-    updateFriendOnlineStatus(userId, true);
   });
   
   socket.on('user-offline', (userId) => {
@@ -226,7 +227,6 @@ function initSocket() {
       chatWithStatusEl.textContent = '○ Не в сети';
       chatWithStatusEl.style.color = 'var(--text-muted)';
     }
-    updateFriendOnlineStatus(userId, false);
   });
   
   socket.on('new-message', (message) => {
@@ -271,23 +271,6 @@ function initSocket() {
     cleanupCall();
     alert('Звонок завершён');
   });
-  
-  socket.on('user-offline-call', (targetId) => {
-    alert('Пользователь не в сети. Звонок невозможен.');
-  });
-}
-
-function updateFriendOnlineStatus(userId, online) {
-  const friendItems = document.querySelectorAll('.friend-item');
-  friendItems.forEach(item => {
-    if (item.dataset.id === userId) {
-      const statusEl = item.querySelector('.friend-status');
-      if (statusEl) {
-        statusEl.textContent = online ? '●' : '○';
-        statusEl.style.color = online ? 'var(--success)' : 'var(--text-muted)';
-      }
-    }
-  });
 }
 
 // ==================== ДРУЗЬЯ ====================
@@ -295,6 +278,7 @@ async function loadFriends() {
   try {
     const res = await fetch(`/api/friends/${currentUser.userId}`);
     const data = await res.json();
+    console.log('📋 Friends loaded:', data);
     friends = Array.isArray(data) ? data : [];
     renderFriendsList();
   } catch (err) {
@@ -343,8 +327,6 @@ async function selectFriend(friendId) {
   const res = await fetch(`/api/messages/${currentUser.userId}/${friendId}`);
   const messages = await res.json();
   renderMessages(messages);
-  
-  loadFriends();
 }
 
 function renderMessages(messages) {
@@ -445,47 +427,58 @@ async function uploadImage() {
 }
 
 async function toggleVoiceRecord() {
+  if (!selectedFriend) {
+    alert('Выберите друга');
+    return;
+  }
+  
   if (!mediaRecorder) {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
-    audioChunks = [];
-    
-    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-    mediaRecorder.onstop = async () => {
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'voice.webm');
-      formData.append('senderId', currentUser.userId);
-      formData.append('receiverId', selectedFriend.id);
-      formData.append('duration', Math.round(audioChunks.length * 0.1));
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
       
-      const res = await fetch('/api/upload-voice', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.success) {
-        socket.emit('send-message', {
-          senderId: currentUser.userId,
-          receiverId: selectedFriend.id,
-          content: `🎤 Голосовое`,
-          type: 'voice',
-          fileUrl: data.fileUrl
-        });
-      }
-    };
-    
-    mediaRecorder.start();
-    voiceRecordBtn.textContent = '⏹️';
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'voice.webm');
+        formData.append('senderId', currentUser.userId);
+        formData.append('receiverId', selectedFriend.id);
+        formData.append('duration', Math.round(audioChunks.length * 0.1));
+        
+        const res = await fetch('/api/upload-voice', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.success) {
+          socket.emit('send-message', {
+            senderId: currentUser.userId,
+            receiverId: selectedFriend.id,
+            content: `🎤 Голосовое`,
+            type: 'voice',
+            fileUrl: data.fileUrl
+          });
+        }
+      };
+      
+      mediaRecorder.start();
+      voiceRecordBtn.textContent = '⏹️';
+      voiceRecordBtn.style.background = 'var(--danger)';
+    } catch (err) {
+      alert('Нет доступа к микрофону');
+    }
   } else {
     mediaRecorder.stop();
     mediaRecorder.stream.getTracks().forEach(t => t.stop());
     mediaRecorder = null;
     voiceRecordBtn.textContent = '🎤';
+    voiceRecordBtn.style.background = '';
   }
 }
 
 async function addFriend() {
   const friendId = friendIdInput.value.trim().toUpperCase();
-  if (!friendId) return alert('Введите ID');
-  if (friendId === currentUser.userId) return alert('Нельзя добавить себя');
+  if (!friendId) return alert('Введите ID друга');
+  if (friendId === currentUser.userId) return alert('Нельзя добавить самого себя');
   
   try {
     const res = await fetch('/api/friends/add', {
@@ -499,6 +492,7 @@ async function addFriend() {
     
     friendIdInput.value = '';
     await loadFriends();
+    setTimeout(() => loadFriends(), 300);
     alert('✅ Друг добавлен!');
   } catch (err) {
     alert('❌ ' + err.message);
@@ -609,11 +603,16 @@ async function uploadAvatar() {
   formData.append('avatar', file);
   formData.append('userId', currentUser.userId);
   
-  const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData });
-  const data = await res.json();
-  if (data.success) {
-    currentUser.avatar_photo = data.avatar_photo;
-    profileAvatar.src = data.avatar_photo;
+  try {
+    const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.success) {
+      currentUser.avatar_photo = data.avatar_photo;
+      profileAvatar.src = data.avatar_photo;
+      alert('✅ Фото обновлено!');
+    }
+  } catch (err) {
+    alert('❌ Ошибка загрузки');
   }
   avatarInput.value = '';
 }
@@ -651,7 +650,7 @@ function changeTheme(theme) {
 
 function applyTheme(theme) {
   document.body.setAttribute('data-theme', theme);
-  themeSelect.value = theme;
+  if (themeSelect) themeSelect.value = theme;
 }
 
 async function enableNotifications() {
@@ -682,11 +681,10 @@ async function loadCallsHistory() {
     }
     
     callsList.innerHTML = calls.map(c => {
-      const isIncoming = c.receiverId === currentUser.userId;
+      const isIncoming = c.receiverid === currentUser.userId;
       const otherName = isIncoming ? c.caller_name : c.receiver_name;
-      const icon = isIncoming ? '📞 Входящий' : '📤 Исходящий';
       const time = new Date(c.timestamp).toLocaleString('ru-RU');
-      const status = c.status === 'missed' ? '❌ Пропущен' : '✅ Принят';
+      const status = c.status === 'missed' ? '❌ Пропущен' : (c.status === 'accepted' ? '✅ Принят' : '📤 Исходящий');
       
       return `<div class="call-item">
         <div class="call-icon">${isIncoming ? '📞' : '📤'}</div>
