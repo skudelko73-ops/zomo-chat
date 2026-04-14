@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>ZOMO CHAT — Игры, Дуэли, Магазин</title>
+  <title>ZOMO CHAT v3.0 — Игры, Звонки, Магазин</title>
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,7 +17,7 @@
     <div id="auth-container" class="auth-container glass-panel">
       <div class="auth-header">
         <h1 class="logo">ZOMO CHAT</h1>
-        <p class="subhead">Игры • Дуэли • Магазин</p>
+        <p class="subhead">Игры • Дуэли • Звонки • Магазин</p>
       </div>
       <div id="auth-forms" class="auth-forms">
         <form id="login-form" class="auth-form active">
@@ -76,7 +76,7 @@
                 <div class="search-section">
                   <div class="input-group">
                     <input type="text" id="friend-id-input" placeholder="Добавить по ID">
-                    <button id="add-friend-btn" class="icon-btn">➕</button>
+                    <button id="add-friend-btn" class="icon-btn">🔍</button>
                   </div>
                 </div>
                 <div class="friends-list" id="friends-list"><p class="empty-text">Друзей пока нет</p></div>
@@ -88,29 +88,25 @@
                   <button class="back-btn" id="mobile-back-btn">←</button>
                   <div class="chat-header-info">
                     <h3 id="chat-with-name">Выберите друга</h3>
-                   <span id="chat-with-status"></span>
-</div>
-<div class="streak-display" id="streak-display" style="display:none">
-  <span>🔥</span><span id="streak-count">0</span>
-</div>
-</div>
-<div id="messages-container" class="messages-container">
-  <div class="empty-chat-message">
-    <div class="empty-icon">💬</div>
-    <h4>Нет сообщений</h4>
-  </div>
-</div>
-<div class="chat-attachments">
-  <button type="button" id="attach-image-btn" class="attach-btn">+</button>
-  <button type="button" id="voice-record-btn" class="attach-btn">🎤</button>
-  <button type="button" id="sticker-btn" class="attach-btn">😊</button>
-  <input type="file" id="image-input" accept="image/*" style="display:none">
-</div>
-<form id="message-form" class="message-input-container">
-  <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off" disabled>
-  <button type="submit" class="send-btn" disabled>➤</button>
-</form>
-</main>
+                    <span id="chat-with-status"></span>
+                  </div>
+                  <button id="call-btn" class="call-btn" style="display:none" title="Позвонить">📞</button>
+                  <div class="streak-display" id="streak-display" style="display:none"><span>🔥</span><span id="streak-count">0</span></div>
+                </div>
+                <div id="messages-container" class="messages-container">
+                  <div class="empty-chat-message"><div class="empty-icon">💬</div><h4>Нет сообщений</h4></div>
+                </div>
+                <div class="chat-attachments">
+                  <button type="button" id="attach-image-btn" class="attach-btn">+</button>
+                  <button type="button" id="voice-record-btn" class="attach-btn">🎤</button>
+                  <button type="button" id="sticker-btn" class="attach-btn">😊</button>
+                  <input type="file" id="image-input" accept="image/*" style="display:none">
+                </div>
+                <form id="message-form" class="message-input-container">
+                  <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off" disabled>
+                  <button type="submit" class="send-btn" disabled>➤</button>
+                </form>
+              </main>
             </div>
           </div>
         </div>
@@ -145,15 +141,27 @@
                 <div class="avatar-controls">
                   <button id="upload-avatar-btn" class="btn-secondary">📷 Загрузить фото</button>
                   <input type="file" id="avatar-photo-input" accept="image/*" style="display:none">
-                  <button id="remove-accessory-btn" class="btn-secondary">🗑️ Снять всё</button>
                 </div>
-                <p class="editor-hint">Перетаскивайте аксессуары, +/- меняет размер</p>
+                <p class="editor-hint">
+                  📱 <strong>На телефоне:</strong> двойной тап — показать +/-<br>
+                  💻 <strong>На ПК:</strong> клик — показать +/-<br>
+                  ✋ Перетаскивайте аксессуары
+                </p>
               </div>
               <div class="profile-info">
                 <h3 id="profile-nickname">Nickname</h3>
                 <p>ID: <span id="profile-id">...</span></p>
                 <p>Монеты: <span id="profile-coins">0</span> 🪙</p>
-                <div class="equipped-accessories"><h4>Надето:</h4><div id="equipped-list"></div></div>
+                <div class="inventory-tabs">
+                  <button class="inventory-tab active" data-tab="equipped">Надето</button>
+                  <button class="inventory-tab" data-tab="inventory">Инвентарь</button>
+                </div>
+                <div id="equipped-section">
+                  <div id="equipped-list"></div>
+                </div>
+                <div id="inventory-section" style="display:none">
+                  <div id="inventory-list"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -167,7 +175,7 @@
               <div class="game-card"><div class="game-icon">🎡</div><h3>Колесо фортуны</h3><button class="btn-primary" id="wheel-spin-btn">🎲 Крутить</button><p id="wheel-timer"></p></div>
               <div class="game-card"><div class="game-icon">🔢</div><h3>Угадай число</h3><button class="btn-primary" id="guess-number-btn">🎯 Играть</button></div>
               <div class="game-card"><div class="game-icon">🖱️</div><h3>Кликер</h3><button class="btn-primary" id="clicker-btn">👆 Клик</button><p id="clicker-count">0/50</p></div>
-              <div class="game-card"><div class="game-icon">📝</div><h3>Викторина</h3><button class="btn-primary" id="quiz-btn">❓ Начать</button></div>
+              <div class="game-card"><div class="game-icon">📝</div><h3>Викторина</h3><button class="btn-primary" id="quiz-btn">❓ Начать</button><p id="quiz-timer"></p></div>
             </div>
             <h3>⚔️ Дуэли</h3>
             <div class="duel-create">
@@ -197,6 +205,7 @@
     <div id="guess-modal" class="modal"><div class="modal-content glass-panel"><h2>🔢 Угадай число</h2><input type="number" id="guess-input" min="1" max="100"><p id="guess-hint"></p><p id="guess-attempts"></p><button class="btn-primary" id="submit-guess-btn">Угадать</button><button class="btn-secondary" id="close-guess-modal">Закрыть</button></div></div>
     <div id="quiz-modal" class="modal"><div class="modal-content glass-panel"><h2>📝 Викторина</h2><div id="quiz-content"></div><button class="btn-secondary" id="close-quiz-modal">Закрыть</button></div></div>
     <div id="sticker-modal" class="modal"><div class="modal-content glass-panel"><h2>😊 Стикеры</h2><div class="sticker-grid" id="sticker-grid"></div><button class="btn-secondary" id="close-sticker-modal">Закрыть</button></div></div>
+    <div id="call-modal" class="modal"><div class="modal-content glass-panel call-modal"><h2>📞 Входящий звонок</h2><p id="caller-name"></p><div class="call-buttons"><button class="call-accept-btn" id="accept-call-btn">📞 Принять</button><button class="call-reject-btn" id="reject-call-btn">📵 Отклонить</button></div></div></div>
   </div>
 
   <script src="script.js"></script>
