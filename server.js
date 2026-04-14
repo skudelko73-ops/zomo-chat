@@ -34,18 +34,17 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         nickname TEXT UNIQUE,
-        password TEXT
+        password TEXT,
+        avatar_photo TEXT,
+        theme TEXT DEFAULT 'dark'
       )
     `);
-    
-    try { await pool.query('ALTER TABLE users ADD COLUMN avatar_photo TEXT'); } catch (e) {}
-    try { await pool.query('ALTER TABLE users ADD COLUMN theme TEXT DEFAULT \'dark\''); } catch (e) {}
     
     await pool.query(`
       CREATE TABLE IF NOT EXISTS messages (
         id SERIAL PRIMARY KEY,
-        senderId TEXT,
-        receiverId TEXT,
+        "senderId" TEXT,
+        "receiverId" TEXT,
         content TEXT,
         type TEXT DEFAULT 'text',
         file_url TEXT,
@@ -56,17 +55,17 @@ async function initDB() {
     
     await pool.query(`
       CREATE TABLE IF NOT EXISTS friends (
-        userId TEXT,
-        friendId TEXT,
-        PRIMARY KEY(userId, friendId)
+        "userId" TEXT,
+        "friendId" TEXT,
+        PRIMARY KEY("userId", "friendId")
       )
     `);
     
     await pool.query(`
       CREATE TABLE IF NOT EXISTS calls (
         id SERIAL PRIMARY KEY,
-        callerId TEXT,
-        receiverId TEXT,
+        "callerId" TEXT,
+        "receiverId" TEXT,
         status TEXT DEFAULT 'missed',
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -141,8 +140,7 @@ app.post('/api/upload-avatar', upload.single('avatar'), async (req, res) => {
   const { userId } = req.body;
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const fileUrl = '/uploads/' + req.file.filename;
-  console.log('📷 Avatar uploaded:', fileUrl);
-  await pool.query('UPDATE users SET "avatar_photo" = $1 WHERE id = $2', [fileUrl, userId]);
+  await pool.query('UPDATE users SET avatar_photo = $1 WHERE id = $2', [fileUrl, userId]);
   res.json({ success: true, avatar_photo: fileUrl });
 });
 
@@ -154,66 +152,42 @@ app.post('/api/theme', async (req, res) => {
 // ==================== ДРУЗЬЯ ====================
 app.get('/api/friends/:userId', async (req, res) => {
   const { userId } = req.params;
-  console.log('📋 Getting friends for:', userId);
-  
   try {
     const result = await pool.query(`
-      SELECT DISTINCT u.id, u.nickname, u."avatar_photo",
-        (SELECT content FROM messages WHERE ((senderId = $1 AND receiverId = u.id) OR (senderId = u.id AND receiverId = $1)) ORDER BY timestamp DESC LIMIT 1) as lastMessage,
-        (SELECT COUNT(*) FROM messages WHERE senderId = u.id AND receiverId = $1 AND read = false) as unread
+      SELECT DISTINCT u.id, u.nickname, u.avatar_photo,
+        (SELECT content FROM messages WHERE (("senderId" = $1 AND "receiverId" = u.id) OR ("senderId" = u.id AND "receiverId" = $1)) ORDER BY timestamp DESC LIMIT 1) as lastMessage,
+        (SELECT COUNT(*) FROM messages WHERE "senderId" = u.id AND "receiverId" = $1 AND read = false) as unread
       FROM friends f
       JOIN users u ON (f."friendId" = u.id AND f."userId" = $1) OR (f."userId" = u.id AND f."friendId" = $1)
       WHERE f."userId" = $1 OR f."friendId" = $1
     `, [userId]);
-    
-    console.log('✅ Friends found:', result.rows.length);
     res.json(result.rows || []);
   } catch (err) {
-    console.error('❌ Friends error:', err);
+    console.error('Friends error:', err);
     res.json([]);
   }
 });
 
 app.post('/api/friends/add', async (req, res) => {
   const { userId, friendId } = req.body;
-  
-  console.log('➕ Add friend request:', userId, '->', friendId);
-  
-  if (!userId || !friendId) {
-    return res.status(400).json({ error: 'Missing IDs' });
-  }
-  if (userId === friendId) {
-    return res.status(400).json({ error: 'Cannot add yourself' });
-  }
+  if (!userId || !friendId) return res.status(400).json({ error: 'Missing IDs' });
+  if (userId === friendId) return res.status(400).json({ error: 'Cannot add yourself' });
   
   try {
-    // Проверяем, существует ли пользователь
     const check = await pool.query('SELECT id FROM users WHERE id = $1', [friendId]);
-    if (check.rows.length === 0) {
-      console.log('❌ User not found:', friendId);
-      return res.status(404).json({ error: 'Пользователь не найден' });
-    }
+    if (check.rows.length === 0) return res.status(404).json({ error: 'Пользователь не найден' });
     
-    // Проверяем, не друзья ли уже
     const existing = await pool.query(
       'SELECT * FROM friends WHERE ("userId" = $1 AND "friendId" = $2) OR ("userId" = $2 AND "friendId" = $1)',
       [userId, friendId]
     );
+    if (existing.rows.length > 0) return res.status(400).json({ error: 'Уже в друзьях' });
     
-    if (existing.rows.length > 0) {
-      console.log('⚠️ Already friends');
-      return res.status(400).json({ error: 'Уже в друзьях' });
-    }
-    
-    // Добавляем друга
     await pool.query('INSERT INTO friends ("userId", "friendId") VALUES ($1, $2)', [userId, friendId]);
-    
-    console.log('✅ Friend added successfully!');
     res.json({ success: true, message: 'Друг добавлен' });
-    
   } catch (err) {
-    console.error('❌ Add friend error:', err);
-    res.status(500).json({ error: 'Ошибка сервера: ' + err.message });
+    console.error('Add friend error:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
@@ -221,9 +195,9 @@ app.post('/api/friends/add', async (req, res) => {
 app.get('/api/messages/:userId/:friendId', async (req, res) => {
   const { userId, friendId } = req.params;
   try {
-    await pool.query('UPDATE messages SET read = true WHERE senderId = $1 AND receiverId = $2 AND read = false', [friendId, userId]);
+    await pool.query('UPDATE messages SET read = true WHERE "senderId" = $1 AND "receiverId" = $2 AND read = false', [friendId, userId]);
     const result = await pool.query(
-      'SELECT * FROM messages WHERE (senderId = $1 AND receiverId = $2) OR (senderId = $2 AND receiverId = $1) ORDER BY timestamp ASC',
+      'SELECT * FROM messages WHERE ("senderId" = $1 AND "receiverId" = $2) OR ("senderId" = $2 AND "receiverId" = $1) ORDER BY timestamp ASC',
       [userId, friendId]
     );
     res.json(result.rows || []);
@@ -234,7 +208,7 @@ app.get('/api/messages/:userId/:friendId', async (req, res) => {
 
 app.get('/api/unread/:userId', async (req, res) => {
   try {
-    const result = await pool.query('SELECT COUNT(*) FROM messages WHERE receiverId = $1 AND read = false', [req.params.userId]);
+    const result = await pool.query('SELECT COUNT(*) FROM messages WHERE "receiverId" = $1 AND read = false', [req.params.userId]);
     res.json({ count: parseInt(result.rows[0].count) || 0 });
   } catch (err) {
     res.json({ count: 0 });
@@ -245,7 +219,7 @@ app.post('/api/upload-chat-image', upload.single('image'), async (req, res) => {
   const { senderId, receiverId } = req.body;
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const fileUrl = '/uploads/' + req.file.filename;
-  await pool.query('INSERT INTO messages (senderId, receiverId, content, type, file_url) VALUES ($1, $2, $3, $4, $5)',
+  await pool.query('INSERT INTO messages ("senderId", "receiverId", content, type, file_url) VALUES ($1, $2, $3, $4, $5)',
     [senderId, receiverId, '📷 Фото', 'image', fileUrl]);
   res.json({ success: true, fileUrl });
 });
@@ -254,7 +228,7 @@ app.post('/api/upload-voice', upload.single('audio'), async (req, res) => {
   const { senderId, receiverId, duration } = req.body;
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const fileUrl = '/uploads/' + req.file.filename;
-  await pool.query('INSERT INTO messages (senderId, receiverId, content, type, file_url) VALUES ($1, $2, $3, $4, $5)',
+  await pool.query('INSERT INTO messages ("senderId", "receiverId", content, type, file_url) VALUES ($1, $2, $3, $4, $5)',
     [senderId, receiverId, `🎤 Голосовое (${duration}с)`, 'voice', fileUrl]);
   res.json({ success: true, fileUrl });
 });
@@ -265,9 +239,9 @@ app.get('/api/calls/:userId', async (req, res) => {
     const result = await pool.query(`
       SELECT c.*, u1.nickname as caller_name, u2.nickname as receiver_name
       FROM calls c
-      JOIN users u1 ON c.callerId = u1.id
-      JOIN users u2 ON c.receiverId = u2.id
-      WHERE c.callerId = $1 OR c.receiverId = $1
+      JOIN users u1 ON c."callerId" = u1.id
+      JOIN users u2 ON c."receiverId" = u2.id
+      WHERE c."callerId" = $1 OR c."receiverId" = $1
       ORDER BY c.timestamp DESC LIMIT 50
     `, [req.params.userId]);
     res.json(result.rows);
@@ -279,7 +253,7 @@ app.get('/api/calls/:userId', async (req, res) => {
 app.post('/api/calls', async (req, res) => {
   const { callerId, receiverId, status } = req.body;
   try {
-    await pool.query('INSERT INTO calls (callerId, receiverId, status) VALUES ($1, $2, $3)', [callerId, receiverId, status || 'missed']);
+    await pool.query('INSERT INTO calls ("callerId", "receiverId", status) VALUES ($1, $2, $3)', [callerId, receiverId, status || 'missed']);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Database error' });
@@ -302,7 +276,7 @@ io.on('connection', (socket) => {
     const { senderId, receiverId, content, type, fileUrl } = data;
     if (!senderId || !receiverId) return;
     try {
-      await pool.query('INSERT INTO messages (senderId, receiverId, content, type, file_url) VALUES ($1, $2, $3, $4, $5)',
+      await pool.query('INSERT INTO messages ("senderId", "receiverId", content, type, file_url) VALUES ($1, $2, $3, $4, $5)',
         [senderId, receiverId, content, type || 'text', fileUrl]);
       const message = { senderId, receiverId, content, type, fileUrl, timestamp: new Date().toISOString() };
       const receiverSocket = onlineUsers.get(receiverId);
