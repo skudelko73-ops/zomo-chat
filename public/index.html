@@ -3,209 +3,166 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>ZOMO CHAT v3.0 — Игры, Звонки, Магазин</title>
+  <title>ZOMO CHAT</title>
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="/socket.io/socket.io.js"></script>
   <link rel="manifest" href="/manifest.json">
 </head>
 <body>
   <div id="app" class="app">
-    <!-- Auth Container -->
-    <div id="auth-container" class="auth-container glass-panel">
+    <!-- АВТОРИЗАЦИЯ -->
+    <div id="auth-container" class="auth-container">
       <div class="auth-header">
         <h1 class="logo">ZOMO CHAT</h1>
-        <p class="subhead">Игры • Дуэли • Звонки • Магазин</p>
       </div>
-      <div id="auth-forms" class="auth-forms">
+      <div id="auth-forms">
         <form id="login-form" class="auth-form active">
-          <h2 class="form-title">С возвращением</h2>
-          <div class="input-group"><input type="text" id="login-nickname" placeholder="Никнейм" autocomplete="off" required></div>
-          <div class="input-group"><input type="password" id="login-password" placeholder="Пароль" required></div>
+          <h2>Вход</h2>
+          <input type="text" id="login-nickname" placeholder="Никнейм" autocomplete="off" required>
+          <input type="password" id="login-password" placeholder="Пароль" required>
           <button type="submit" class="btn-primary">Войти</button>
           <p class="form-footer">Нет аккаунта? <a href="#" id="show-register">Создать</a></p>
         </form>
-
         <form id="register-form" class="auth-form">
-          <h2 class="form-title">Создать аккаунт</h2>
-          <div class="input-group"><input type="text" id="reg-nickname" placeholder="Никнейм" autocomplete="off" required></div>
-          <div class="input-group"><input type="password" id="reg-password" placeholder="Пароль" required></div>
-          <div class="emoji-selector">
-            <p class="emoji-label">Выбери смайлик:</p>
-            <div class="emoji-grid" id="emoji-grid"></div>
-            <input type="hidden" id="selected-emoji" value="😊">
-          </div>
+          <h2>Регистрация</h2>
+          <input type="text" id="reg-nickname" placeholder="Никнейм" autocomplete="off" required>
+          <input type="password" id="reg-password" placeholder="Пароль" required>
           <button type="submit" class="btn-primary">Зарегистрироваться</button>
-          <p class="form-footer">Уже есть аккаунт? <a href="#" id="show-login">Войти</a></p>
+          <p class="form-footer">Есть аккаунт? <a href="#" id="show-login">Войти</a></p>
         </form>
       </div>
-      <div id="auth-message" class="auth-message"></div>
+      <div id="auth-message"></div>
     </div>
 
-    <!-- Main Container -->
+    <!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
     <div id="main-container" class="main-container" style="display: none;">
-      <nav class="sidebar-menu glass-panel">
-        <div class="menu-header">
-          <div class="user-profile-mini">
-            <div class="avatar-small" id="menu-avatar">😊</div>
-            <div class="user-stats">
-              <span id="menu-nickname">User</span>
-              <span class="coins-display" id="menu-coins">🪙 0</span>
-            </div>
-          </div>
-        </div>
-        <ul class="menu-items">
-          <li class="menu-item active" data-tab="chats"><span class="menu-icon">💬</span><span>Чаты</span></li>
-          <li class="menu-item" data-tab="shop"><span class="menu-icon">🛍️</span><span>Магазин</span></li>
-          <li class="menu-item" data-tab="profile"><span class="menu-icon">👤</span><span>Профиль</span></li>
-          <li class="menu-item" data-tab="games"><span class="menu-icon">🎮</span><span>Игры</span></li>
-          <li class="menu-item" data-tab="settings"><span class="menu-icon">⚙️</span><span>Настройки</span></li>
-        </ul>
-        <div class="menu-footer"><button id="logout-btn-menu" class="btn-secondary">Выйти</button></div>
-      </nav>
-
+      <!-- КОНТЕНТ -->
       <div class="content-area">
-        <!-- Chats Tab -->
+        <!-- ЧАТЫ -->
         <div id="tab-chats" class="tab-content active">
-          <div class="mobile-chats-container">
-            <div class="mobile-chats-list" id="mobile-chats-list">
-              <aside class="chats-sidebar glass-panel">
-                <div class="chats-header"><h3>Друзья</h3></div>
-                <div class="search-section">
-                  <div class="input-group" style="display: flex; align-items: center; gap: 8px;">
-                    <input type="text" id="friend-id-input" placeholder="Добавить по ID" style="flex: 1;">
-                    <button id="add-friend-btn" class="icon-btn" style="width: 48px; height: 48px;">🔍</button>
-                  </div>
+          <div class="chats-container">
+            <div class="friends-sidebar">
+              <div class="sidebar-header">
+                <h2>Сообщения</h2>
+                <div class="add-friend-area">
+                  <input type="text" id="friend-id-input" placeholder="ID друга">
+                  <button id="add-friend-btn">🔍</button>
                 </div>
-                <div class="friends-list" id="friends-list"><p class="empty-text">Друзей пока нет</p></div>
-              </aside>
+              </div>
+              <div class="friends-list" id="friends-list"></div>
             </div>
-            <div class="mobile-chat-view" id="mobile-chat-view">
-              <main class="chat-area glass-panel">
-                <div class="chat-header">
-                  <button class="back-btn" id="mobile-back-btn">←</button>
-                  <div class="chat-header-info">
-                    <h3 id="chat-with-name">Выберите друга</h3>
+            <div class="chat-view" id="chat-view">
+              <div class="chat-header">
+                <button class="back-btn" id="back-to-friends">←</button>
+                <div class="chat-header-info">
+                  <img id="chat-avatar" class="chat-avatar" src="" alt="">
+                  <div>
+                    <h3 id="chat-with-name">Выберите чат</h3>
                     <span id="chat-with-status"></span>
                   </div>
-                  <button id="call-btn" class="call-btn" style="display:none" title="Позвонить">📞</button>
-                  <div class="streak-display" id="streak-display" style="display:none"><span>🔥</span><span id="streak-count">0</span></div>
                 </div>
-                <div id="messages-container" class="messages-container">
-                  <div class="empty-chat-message"><div class="empty-icon">💬</div><h4>Нет сообщений</h4></div>
-                </div>
-                <div class="chat-attachments">
-                  <button type="button" id="attach-image-btn" class="attach-btn">+</button>
-                  <button type="button" id="voice-record-btn" class="attach-btn">🎤</button>
-                  <button type="button" id="sticker-btn" class="attach-btn">😊</button>
-                  <input type="file" id="image-input" accept="image/*" style="display:none">
-                </div>
-                <form id="message-form" class="message-input-container">
-                  <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off" disabled>
-                  <button type="submit" class="send-btn" disabled>➤</button>
-                </form>
-              </main>
+                <button id="call-btn" class="call-btn" style="display: none;">📞</button>
+              </div>
+              <div class="messages-container" id="messages-container">
+                <div class="empty-chat">💬 Выберите чат</div>
+              </div>
+              <div class="message-input-area">
+                <button id="attach-image-btn" class="attach-btn">+</button>
+                <button id="voice-record-btn" class="attach-btn">🎤</button>
+                <input type="text" id="message-input" placeholder="Сообщение..." disabled>
+                <button id="send-btn" class="send-btn" disabled>➤</button>
+                <input type="file" id="image-input" accept="image/*" style="display: none;">
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Shop Tab -->
-        <div id="tab-shop" class="tab-content">
-          <div class="shop-container glass-panel">
-            <h2>🛍️ Магазин</h2>
-            <div class="shop-coins">Монеты: <span id="shop-coins-amount">0</span> 🪙</div>
-            <div class="shop-categories">
-              <button class="category-btn active" data-category="all">Все</button>
-              <button class="category-btn" data-category="hats">Головные уборы</button>
-              <button class="category-btn" data-category="glasses">Очки</button>
-              <button class="category-btn" data-category="neck">Шея</button>
-              <button class="category-btn" data-category="effects">Эффекты</button>
-              <button class="category-btn legendary" data-category="legendary">✨ Легендарные</button>
-            </div>
-            <div class="shop-items-grid" id="shop-items-grid"></div>
-          </div>
-        </div>
-
-        <!-- Profile Tab -->
+        <!-- ПРОФИЛЬ -->
         <div id="tab-profile" class="tab-content">
-          <div class="profile-container glass-panel">
-            <h2>👤 Профиль</h2>
+          <div class="profile-container">
+            <h2>Профиль</h2>
             <div class="profile-content">
-              <div class="avatar-editor">
-                <div class="avatar-canvas-container" id="avatar-canvas-container">
-                  <div class="avatar-base" id="avatar-base">😊</div>
-                  <div class="accessories-layer" id="accessories-layer"></div>
-                </div>
-                <div class="avatar-controls">
-                  <button id="upload-avatar-btn" class="btn-secondary">📷 Загрузить фото</button>
-                  <input type="file" id="avatar-photo-input" accept="image/*" style="display:none">
-                </div>
-                <p class="editor-hint">
-                  📱 <strong>На телефоне:</strong> двойной тап — показать +/-<br>
-                  💻 <strong>На ПК:</strong> клик — показать +/-<br>
-                  ✋ Перетаскивайте аксессуары
-                </p>
+              <div class="avatar-section">
+                <img id="profile-avatar" class="profile-avatar" src="" alt="">
+                <button id="change-avatar-btn" class="btn-secondary">📷 Сменить фото</button>
+                <input type="file" id="avatar-input" accept="image/*" style="display: none;">
               </div>
               <div class="profile-info">
-                <h3 id="profile-nickname">Nickname</h3>
-                <p>ID: <span id="profile-id">...</span></p>
-                <p>Монеты: <span id="profile-coins">0</span> 🪙</p>
-                <div class="inventory-tabs">
-                  <button class="inventory-tab active" data-tab="equipped">Надето</button>
-                  <button class="inventory-tab" data-tab="inventory">Инвентарь</button>
+                <div class="input-group">
+                  <label>Никнейм</label>
+                  <input type="text" id="profile-nickname" placeholder="Ваш никнейм">
+                  <button id="save-nickname-btn" class="btn-small">Сохранить</button>
                 </div>
-                <div id="equipped-section">
-                  <div id="equipped-list"></div>
-                </div>
-                <div id="inventory-section" style="display:none">
-                  <div id="inventory-list"></div>
-                </div>
+                <p>ID: <span id="profile-id"></span></p>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Games Tab -->
-        <div id="tab-games" class="tab-content">
-          <div class="games-container glass-panel">
-            <h2>🎮 Мини-игры</h2>
-            <div class="games-grid">
-              <div class="game-card"><div class="game-icon">🎡</div><h3>Колесо фортуны</h3><button class="btn-primary" id="wheel-spin-btn">🎲 Крутить</button><p id="wheel-timer"></p></div>
-              <div class="game-card"><div class="game-icon">🔢</div><h3>Угадай число</h3><button class="btn-primary" id="guess-number-btn">🎯 Играть</button></div>
-              <div class="game-card"><div class="game-icon">🖱️</div><h3>Кликер</h3><button class="btn-primary" id="clicker-btn">👆 Клик</button><p id="clicker-count">0/50</p></div>
-              <div class="game-card"><div class="game-icon">📝</div><h3>Викторина</h3><button class="btn-primary" id="quiz-btn">❓ Начать</button><p id="quiz-timer"></p></div>
+        <!-- НАСТРОЙКИ -->
+        <div id="tab-settings" class="tab-content">
+          <div class="settings-container">
+            <h2>Настройки</h2>
+            <div class="setting-item">
+              <span>Тема</span>
+              <select id="theme-select">
+                <option value="dark">Тёмная</option>
+                <option value="light">Светлая</option>
+              </select>
             </div>
-            <h3>⚔️ Дуэли</h3>
-            <div class="duel-create">
-              <select id="duel-friend-select"><option>Выберите друга</option></select>
-              <select id="duel-game-select"><option value="rps">КНБ</option><option value="coin">Монетка</option></select>
-              <input type="number" id="duel-bet" placeholder="Ставка" min="50" max="5000" value="100">
-              <button class="btn-primary" id="create-duel-btn">⚔️ Вызвать</button>
+            <div class="setting-item">
+              <span>Уведомления</span>
+              <button id="enable-notifications-btn" class="btn-secondary">🔔 Включить</button>
             </div>
+            <button id="logout-btn" class="btn-danger">Выйти</button>
           </div>
         </div>
 
-        <!-- Settings Tab -->
-        <div id="tab-settings" class="tab-content">
-          <div class="settings-container glass-panel">
-            <h2>⚙️ Настройки</h2>
-            <div class="settings-section"><h3>Тема</h3><div class="theme-selector"><button class="theme-btn" data-theme="dark">🌙 Тёмная</button><button class="theme-btn" data-theme="light">☀️ Светлая</button><button class="theme-btn" data-theme="neon">🌈 Неоновая</button></div></div>
-            <div class="settings-section"><h3>Смайлик</h3><div class="emoji-grid" id="settings-emoji-grid"></div><button class="btn-primary" id="save-emoji-btn">Сохранить</button></div>
-            <div class="settings-section"><h3>Ежедневный бонус</h3><button class="btn-primary" id="daily-bonus-btn">🎁 Получить (25 🪙)</button><p id="daily-bonus-status"></p></div>
-            <div class="settings-section"><h3>Уведомления</h3><button class="btn-primary" id="enable-notifications-btn">🔔 Включить</button></div>
+        <!-- ИСТОРИЯ ЗВОНКОВ -->
+        <div id="tab-calls" class="tab-content">
+          <div class="calls-container">
+            <h2>История звонков</h2>
+            <div class="calls-list" id="calls-list"></div>
           </div>
         </div>
       </div>
+
+      <!-- НИЖНЕЕ МЕНЮ -->
+      <nav class="bottom-menu">
+        <div class="menu-item" data-tab="chats">
+          <span class="menu-icon">💬</span>
+          <span>Чаты</span>
+          <span class="badge" id="chats-badge" style="display: none;">0</span>
+        </div>
+        <div class="menu-item" data-tab="calls">
+          <span class="menu-icon">📞</span>
+          <span>Звонки</span>
+        </div>
+        <div class="menu-item" data-tab="profile">
+          <span class="menu-icon">👤</span>
+          <span>Профиль</span>
+        </div>
+        <div class="menu-item" data-tab="settings">
+          <span class="menu-icon">⚙️</span>
+          <span>Настройки</span>
+        </div>
+      </nav>
     </div>
 
-    <!-- Модалки -->
-    <div id="wheel-modal" class="modal"><div class="modal-content glass-panel"><h2>🎡 Колесо фортуны</h2><div class="wheel-container"><canvas id="wheel-canvas" width="300" height="300"></canvas><div class="wheel-pointer">▼</div></div><div id="wheel-result"></div><button class="btn-primary" id="spin-wheel-btn">🎲 Крутить</button><button class="btn-secondary" id="close-wheel-modal">Закрыть</button></div></div>
-    <div id="guess-modal" class="modal"><div class="modal-content glass-panel"><h2>🔢 Угадай число</h2><input type="number" id="guess-input" min="1" max="100"><p id="guess-hint"></p><p id="guess-attempts"></p><button class="btn-primary" id="submit-guess-btn">Угадать</button><button class="btn-secondary" id="close-guess-modal">Закрыть</button></div></div>
-    <div id="quiz-modal" class="modal"><div class="modal-content glass-panel"><h2>📝 Викторина</h2><div id="quiz-content"></div><button class="btn-secondary" id="close-quiz-modal">Закрыть</button></div></div>
-    <div id="sticker-modal" class="modal"><div class="modal-content glass-panel"><h2>😊 Стикеры</h2><div class="sticker-grid" id="sticker-grid"></div><button class="btn-secondary" id="close-sticker-modal">Закрыть</button></div></div>
-    <div id="call-modal" class="modal"><div class="modal-content glass-panel call-modal"><h2>📞 Входящий звонок</h2><p id="caller-name"></p><div class="call-buttons"><button class="call-accept-btn" id="accept-call-btn">📞 Принять</button><button class="call-reject-btn" id="reject-call-btn">📵 Отклонить</button></div></div></div>
+    <!-- МОДАЛКА ЗВОНКА -->
+    <div id="call-modal" class="modal" style="display: none;">
+      <div class="modal-content">
+        <h2>📞 Входящий звонок</h2>
+        <p id="caller-name"></p>
+        <div class="call-buttons">
+          <button id="accept-call-btn" class="call-accept">Принять</button>
+          <button id="reject-call-btn" class="call-reject">Отклонить</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="script.js"></script>
