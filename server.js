@@ -369,14 +369,34 @@ app.get('/api/friends/:userId', async (req, res) => {
 
 app.post('/api/friends/add', async (req, res) => {
   const { userId, friendId } = req.body;
-  if (userId === friendId) return res.status(400).json({ error: 'Cannot add yourself' });
+  
+  if (!userId || !friendId) {
+    return res.status(400).json({ error: 'Missing userId or friendId' });
+  }
+  if (userId === friendId) {
+    return res.status(400).json({ error: 'Cannot add yourself' });
+  }
+  
   try {
     const check = await pool.query('SELECT id FROM users WHERE id = $1', [friendId]);
-    if (check.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    await pool.query('INSERT INTO friends (userId, friendId) VALUES ($1, $2) ON CONFLICT DO NOTHING', [userId, friendId]);
-    res.json({ success: true });
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+    
+    const existing = await pool.query(
+      'SELECT * FROM friends WHERE (userId = $1 AND friendId = $2) OR (userId = $2 AND friendId = $1)',
+      [userId, friendId]
+    );
+    
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Уже в друзьях' });
+    }
+    
+    await pool.query('INSERT INTO friends (userId, friendId) VALUES ($1, $2)', [userId, friendId]);
+    res.json({ success: true, message: 'Друг добавлен' });
   } catch (err) {
-    res.status(500).json({ error: 'Database error' });
+    console.error('Add friend error:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
