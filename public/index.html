@@ -2,56 +2,120 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>ZOMO CHAT</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="/manifest.json">
   <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-  <div id="auth-container" class="auth-container">
-    <h1>ZOMO CHAT</h1>
-    <form id="login-form">
-      <h2>Вход</h2>
-      <input type="text" id="login-nickname" placeholder="Никнейм" required>
-      <input type="password" id="login-password" placeholder="Пароль" required>
-      <button type="submit">Войти</button>
-      <p>Нет аккаунта? <a href="#" id="show-register">Создать</a></p>
-    </form>
-    <form id="register-form" style="display:none">
-      <h2>Регистрация</h2>
-      <input type="text" id="reg-nickname" placeholder="Никнейм" required>
-      <input type="password" id="reg-password" placeholder="Пароль" required>
-      <button type="submit">Зарегистрироваться</button>
-      <p>Есть аккаунт? <a href="#" id="show-login">Войти</a></p>
-    </form>
-    <div id="auth-message"></div>
-  </div>
-
-  <div id="chat-container" style="display:none">
-    <div class="sidebar">
-      <div class="user-info">
-        <span id="current-nickname"></span>
-        <span id="current-id"></span>
-      </div>
-      <div class="add-friend">
-        <input type="text" id="friend-id-input" placeholder="ID друга">
-        <button id="add-friend-btn">Добавить</button>
-      </div>
-      <div class="friends-list" id="friends-list"></div>
-      <button id="logout-btn">Выйти</button>
-    </div>
-    <div class="chat-area">
-      <div class="chat-header">
-        <h3 id="chat-with-name">Выберите друга</h3>
-        <span id="chat-with-status"></span>
-      </div>
-      <div class="messages-container" id="messages-container">
-        <div class="empty-chat">Выберите чат</div>
-      </div>
-      <form id="message-form">
-        <input type="text" id="message-input" placeholder="Сообщение..." disabled>
-        <button type="submit" id="send-btn" disabled>Отправить</button>
+  <div class="app">
+    <!-- АВТОРИЗАЦИЯ -->
+    <div id="auth-container" class="auth-container">
+      <h1 class="logo">ZOMO CHAT</h1>
+      <form id="login-form" class="auth-form">
+        <h2>Вход</h2>
+        <input type="text" id="login-nickname" placeholder="Никнейм" required>
+        <input type="password" id="login-password" placeholder="Пароль" required>
+        <button type="submit" class="btn-primary">Войти</button>
+        <p class="form-footer">Нет аккаунта? <a href="#" id="show-register">Создать</a></p>
       </form>
+      <form id="register-form" class="auth-form" style="display: none;">
+        <h2>Регистрация</h2>
+        <input type="text" id="reg-nickname" placeholder="Никнейм" required>
+        <input type="password" id="reg-password" placeholder="Пароль" required>
+        <button type="submit" class="btn-primary">Зарегистрироваться</button>
+        <p class="form-footer">Есть аккаунт? <a href="#" id="show-login">Войти</a></p>
+      </form>
+      <div id="auth-message" class="auth-message"></div>
+    </div>
+
+    <!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
+    <div id="main-container" class="main-container" style="display: none;">
+      <div class="content-area">
+        <!-- ЧАТЫ -->
+        <div id="tab-chats" class="tab-content active">
+          <div class="chats-container">
+            <div class="friends-sidebar">
+              <div class="sidebar-header">
+                <h2>Сообщения</h2>
+                <div class="add-friend-area">
+                  <input type="text" id="friend-id-input" placeholder="ID друга">
+                  <button id="add-friend-btn">🔍</button>
+                </div>
+              </div>
+              <div class="friends-list" id="friends-list"></div>
+            </div>
+            <div class="chat-view" id="chat-view">
+              <div class="chat-header">
+                <button class="back-btn" id="back-to-friends">←</button>
+                <div class="chat-header-info">
+                  <h3 id="chat-with-name">Выберите друга</h3>
+                  <span id="chat-with-status"></span>
+                </div>
+              </div>
+              <div class="messages-container" id="messages-container">
+                <div class="empty-chat">💬 Выберите чат</div>
+              </div>
+              <div class="message-input-area">
+                <input type="text" id="message-input" placeholder="Сообщение..." disabled>
+                <button class="send-btn" id="send-btn" disabled>➤</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ПРОФИЛЬ -->
+        <div id="tab-profile" class="tab-content">
+          <div class="profile-container">
+            <h2>Профиль</h2>
+            <div class="profile-content">
+              <div class="profile-avatar" id="profile-avatar">👤</div>
+              <div class="profile-info">
+                <p>Никнейм: <span id="profile-nickname"></span></p>
+                <p>ID: <span id="profile-id"></span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- НАСТРОЙКИ -->
+        <div id="tab-settings" class="tab-content">
+          <div class="settings-container">
+            <h2>Настройки</h2>
+            <div class="setting-item">
+              <span>Тема</span>
+              <select id="theme-select">
+                <option value="light">Светлая</option>
+                <option value="dark">Тёмная</option>
+                <option value="neon">Неоновая</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <span>Уведомления</span>
+              <button id="enable-notifications-btn" class="btn-secondary">🔔 Включить</button>
+            </div>
+            <button id="logout-btn" class="btn-danger">Выйти</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- НИЖНЕЕ МЕНЮ -->
+      <nav class="bottom-menu">
+        <div class="menu-item active" data-tab="chats">
+          <span class="menu-icon">💬</span>
+          <span>Чаты</span>
+          <span class="badge" id="chats-badge" style="display: none;">0</span>
+        </div>
+        <div class="menu-item" data-tab="profile">
+          <span class="menu-icon">👤</span>
+          <span>Профиль</span>
+        </div>
+        <div class="menu-item" data-tab="settings">
+          <span class="menu-icon">⚙️</span>
+          <span>Настройки</span>
+        </div>
+      </nav>
     </div>
   </div>
 
