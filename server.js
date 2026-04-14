@@ -367,6 +367,42 @@ app.get('/api/friends/:userId', async (req, res) => {
   }
 });
 
+// ==================== ДРУЗЬЯ ====================
+app.get('/api/friends/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT u.id, u.nickname, u.avatar_emoji, u.avatar_photo, u.coins,
+        (SELECT content FROM messages WHERE (senderId = $1 AND receiverId = u.id) OR (senderId = u.id AND receiverId = $1) ORDER BY timestamp DESC LIMIT 1) as lastMessage
+      FROM friends f
+      JOIN users u ON (f.friendId = u.id AND f.userId = $1) OR (f.userId = u.id AND f.friendId = $1)
+      WHERE f.userId = $1 OR f.friendId = $1
+    `, [userId]);
+    res.json(result.rows || []);
+  } catch (err) {
+    console.error('Friends error:', err);
+    res.json([]);
+  }
+});
+
+// ==================== ДРУЗЬЯ ====================
+app.get('/api/friends/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT u.id, u.nickname, u.avatar_emoji, u.avatar_photo, u.coins,
+        (SELECT content FROM messages WHERE (senderId = $1 AND receiverId = u.id) OR (senderId = u.id AND receiverId = $1) ORDER BY timestamp DESC LIMIT 1) as lastMessage
+      FROM friends f
+      JOIN users u ON (f.friendId = u.id AND f.userId = $1) OR (f.userId = u.id AND f.friendId = $1)
+      WHERE f.userId = $1 OR f.friendId = $1
+    `, [userId]);
+    res.json(result.rows || []);
+  } catch (err) {
+    console.error('Friends error:', err);
+    res.json([]);
+  }
+});
+
 app.post('/api/friends/add', async (req, res) => {
   const { userId, friendId } = req.body;
   
@@ -378,25 +414,29 @@ app.post('/api/friends/add', async (req, res) => {
   }
   
   try {
+    // Проверяем, существует ли пользователь
     const check = await pool.query('SELECT id FROM users WHERE id = $1', [friendId]);
     if (check.rows.length === 0) {
       return res.status(404).json({ error: 'Пользователь не найден' });
     }
     
+    // Проверяем, не друзья ли уже
     const existing = await pool.query(
       'SELECT * FROM friends WHERE (userId = $1 AND friendId = $2) OR (userId = $2 AND friendId = $1)',
       [userId, friendId]
     );
     
     if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'Уже в друзьях' });
+      return res.json({ success: false, error: 'Уже в друзьях' });
     }
     
+    // Добавляем друга
     await pool.query('INSERT INTO friends (userId, friendId) VALUES ($1, $2)', [userId, friendId]);
+    
     res.json({ success: true, message: 'Друг добавлен' });
   } catch (err) {
     console.error('Add friend error:', err);
-    res.status(500).json({ error: 'Ошибка сервера' });
+    res.status(500).json({ error: 'Ошибка сервера: ' + err.message });
   }
 });
 
